@@ -13,6 +13,7 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@line/bot-sdk": "^11.0.1",
     "@prisma/client": "^6.9.0",
     "@radix-ui/react-dialog": "^1.1.16",
     "@radix-ui/react-label": "^2.1.9",
