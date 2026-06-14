@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { LogoutButton } from "@/components/logout-button";
 import { Separator } from "@/components/ui/separator";
 
 const navItems = [
@@ -32,6 +33,9 @@ export default function DashboardLayout({
             </Button>
           ))}
         </nav>
+        <div className="absolute inset-x-4 bottom-6">
+          <LogoutButton />
+        </div>
       </aside>
       <div className="md:pl-64">
         <header className="sticky top-0 z-10 flex h-16 items-center border-b bg-background px-6">
