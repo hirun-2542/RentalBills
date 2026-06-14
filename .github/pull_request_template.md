@@ -6,26 +6,27 @@
 
 -
 
-## Files changed
+## Changes
 
 -
 
-## Tests run
+## Tests Run
 
 -
 
-## Risk / edge cases
+## Risk / Edge Cases
 
 -
 
-## Screenshots / evidence
+## Screenshots
 
 -
 
-## Reviewer checklist
+## Checklist
 
 - [ ] Diff is focused
-- [ ] Tests are included or reason is explained
-- [ ] No secrets or credentials changed
 - [ ] No unrelated refactor
+- [ ] Tests added or updated
 - [ ] Docs updated if needed
+- [ ] No secrets changed
+- [ ] Ready for Claude review
