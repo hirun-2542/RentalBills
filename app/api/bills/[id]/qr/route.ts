@@ -29,11 +29,10 @@ export async function GET(_request: Request, { params }: RouteContext) {
     return NextResponse.json({ error: "Bill not found" }, { status: 404 });
   }
 
-  const settings = await db.settings.upsert({
+  const settings = (await db.settings.findUnique({
     where: { id: "singleton" },
-    update: {},
-    create: { id: "singleton" },
-  });
+    select: { promptpayNumber: true },
+  })) ?? { promptpayNumber: "" };
 
   if (!settings.promptpayNumber.trim()) {
     return NextResponse.json(
@@ -48,6 +47,9 @@ export async function GET(_request: Request, { params }: RouteContext) {
   );
 
   return new Response(new Uint8Array(qr), {
-    headers: { "Content-Type": "image/png" },
+    headers: {
+      "Cache-Control": "private, max-age=300",
+      "Content-Type": "image/png",
+    },
   });
 }

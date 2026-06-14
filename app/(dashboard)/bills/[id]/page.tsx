@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { BillPdfPanel, type BillPdfState } from "@/components/bill-pdf-panel";
+import { PromptPayQrImage } from "@/components/promptpay-qr-image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { db } from "@/lib/db";
 
@@ -25,11 +26,13 @@ export default async function BillDetailPage({ params }: PageProps) {
     notFound();
   }
 
-  const settings = await db.settings.upsert({
+  const settings = (await db.settings.findUnique({
     where: { id: "singleton" },
-    update: {},
-    create: { id: "singleton" },
-  });
+  })) ?? {
+    bankAccountName: "",
+    bankAccountNumber: "",
+    promptpayNumber: "",
+  };
 
   const pdfState: BillPdfState = {
     id: bill.id,
@@ -63,13 +66,13 @@ export default async function BillDetailPage({ params }: PageProps) {
           <CardTitle>ชำระเงิน</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 text-sm md:grid-cols-[250px_1fr]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={`/api/bills/${bill.id}/qr`}
-            alt="QR PromptPay"
-            width={250}
-            height={250}
-          />
+          {settings.promptpayNumber.trim() ? (
+            <PromptPayQrImage billId={bill.id} />
+          ) : (
+            <div className="flex h-[250px] w-[250px] items-center justify-center border bg-muted px-4 text-center text-sm text-muted-foreground">
+              ยังไม่ได้ตั้งค่า PromptPay
+            </div>
+          )}
           <div className="space-y-3">
             <div>
               <span className="text-muted-foreground">ยอดที่ต้องชำระ</span>

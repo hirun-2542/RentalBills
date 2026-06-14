@@ -26,7 +26,6 @@ const mocks = vi.hoisted(() => ({
     },
     settings: {
       findUnique: vi.fn(),
-      upsert: vi.fn(),
     },
     $transaction: vi.fn(),
   },
@@ -93,8 +92,6 @@ describe("Ticket 006 bill API routes", () => {
       waterRatePerUnit: decimal(9),
       waterCollectionFee: decimal(10),
       elecRatePerUnit: decimal(4.75),
-    });
-    mocks.db.settings.upsert.mockResolvedValue({
       promptpayNumber: "0812345678",
       bankAccountNumber: "123-4-56789-0",
       bankAccountName: "Rental Bills",
@@ -462,36 +459,39 @@ describe("Ticket 006 bill API routes", () => {
     await expect(response.text()).resolves.toBe("png");
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe("image/png");
+    expect(response.headers.get("Cache-Control")).toBe("private, max-age=300");
     expect(mocks.db.bill.findUnique).toHaveBeenCalledWith({
       where: { id: "bill-1" },
       select: { total: true },
     });
-    expect(mocks.db.settings.upsert).toHaveBeenCalledWith({
+    expect(mocks.db.settings.findUnique).toHaveBeenCalledWith({
       where: { id: "singleton" },
-      update: {},
-      create: { id: "singleton" },
+      select: { promptpayNumber: true },
     });
     expect(mocks.generatePromptPayQR).toHaveBeenCalledWith("0812345678", 3150);
   });
 
-  it("GET /api/bills/:id/qr returns 422 when PromptPay is not configured", async () => {
-    mocks.db.bill.findUnique.mockResolvedValue({
-      total: decimal(3150),
-    });
-    mocks.db.settings.upsert.mockResolvedValue({
-      promptpayNumber: "",
-    });
+  it.each(["", "   "])(
+    "GET /api/bills/:id/qr returns 422 when PromptPay is %j",
+    async (promptpayNumber) => {
+      mocks.db.bill.findUnique.mockResolvedValue({
+        total: decimal(3150),
+      });
+      mocks.db.settings.findUnique.mockResolvedValue({
+        promptpayNumber,
+      });
 
-    const response = await getBillQr(new Request("http://localhost"), {
-      params: Promise.resolve({ id: "bill-1" }),
-    });
+      const response = await getBillQr(new Request("http://localhost"), {
+        params: Promise.resolve({ id: "bill-1" }),
+      });
 
-    await expect(response.json()).resolves.toEqual({
-      error: "ยังไม่ได้ตั้งค่า PromptPay",
-    });
-    expect(response.status).toBe(422);
-    expect(mocks.generatePromptPayQR).not.toHaveBeenCalled();
-  });
+      await expect(response.json()).resolves.toEqual({
+        error: "ยังไม่ได้ตั้งค่า PromptPay",
+      });
+      expect(response.status).toBe(422);
+      expect(mocks.generatePromptPayQR).not.toHaveBeenCalled();
+    }
+  );
 
   it("GET /api/bills/:id/qr returns 404 when the bill is missing", async () => {
     mocks.db.bill.findUnique.mockResolvedValue(null);
@@ -502,7 +502,7 @@ describe("Ticket 006 bill API routes", () => {
 
     await expect(response.json()).resolves.toEqual({ error: "Bill not found" });
     expect(response.status).toBe(404);
-    expect(mocks.db.settings.upsert).not.toHaveBeenCalled();
+    expect(mocks.db.settings.findUnique).not.toHaveBeenCalled();
     expect(mocks.generatePromptPayQR).not.toHaveBeenCalled();
   });
 
