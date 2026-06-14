@@ -7,7 +7,97 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Placeholder {
-  id        Int      @id @default(autoincrement())
-  createdAt DateTime @default(now())
+model Room {
+  id          String   @id @default(cuid())
+  number      String   @unique
+  description String?
+  rent        Float    @default(0)
+  createdAt   DateTime @default(now())
+  tenant      Tenant?
+  bills       Bill[]
+}
+
+model Tenant {
+  id         String   @id @default(cuid())
+  roomId     String   @unique
+  room       Room     @relation(fields: [roomId], references: [id])
+  name       String
+  lineUserId String?
+  phone      String?
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  bills      Bill[]
+}
+
+model Bill {
+  id                 String      @id @default(cuid())
+  tenantId           String
+  tenant             Tenant      @relation(fields: [tenantId], references: [id])
+  roomId             String
+  room               Room        @relation(fields: [roomId], references: [id])
+  month              Int
+  year               Int
+
+  waterPrevReading   Float
+  waterCurrReading   Float
+  waterUsage         Float
+  waterRatePerUnit   Float
+  waterCollectionFee Float
+  waterTotal         Float
+
+  elecPrevReading    Float
+  elecCurrReading    Float
+  elecUsage          Float
+  elecRatePerUnit    Float
+  elecTotal          Float
+
+  rent               Float
+  total              Float
+
+  status             BillStatus  @default(DRAFT)
+  pdfStatus          PdfStatus   @default(NONE)
+  pdfError           String?
+  pdfUrl             String?
+  sentAt             DateTime?
+  paidAt             DateTime?
+  createdAt          DateTime    @default(now())
+
+  paymentSlips       PaymentSlip[]
+
+  @@unique([tenantId, month, year])
+}
+
+enum BillStatus {
+  DRAFT
+  SENT
+  PAID
+}
+
+enum PdfStatus {
+  NONE
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
+model PaymentSlip {
+  id          String    @id @default(cuid())
+  billId      String
+  bill        Bill      @relation(fields: [billId], references: [id])
+  imageUrl    String
+  note        String?
+  submittedAt DateTime  @default(now())
+  verifiedAt  DateTime?
+}
+
+model Settings {
+  id                 String   @id @default("singleton")
+  waterRatePerUnit   Float    @default(9)
+  waterCollectionFee Float    @default(10)
+  elecRatePerUnit    Float    @default(4.75)
+  bankAccountNumber  String   @default("")
+  bankAccountName    String   @default("")
+  promptpayNumber    String   @default("")
+  updatedAt          DateTime @updatedAt
 }
