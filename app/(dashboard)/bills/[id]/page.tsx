@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { BillLineSendButton } from "@/components/bill-line-send-button";
 import { BillPdfPanel, type BillPdfState } from "@/components/bill-pdf-panel";
 import { PromptPayQrImage } from "@/components/promptpay-qr-image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,6 +45,12 @@ export default async function BillDetailPage({ params }: PageProps) {
     pdfStatus: bill.pdfStatus,
     pdfUrl: bill.pdfUrl,
     pdfError: bill.pdfError,
+  };
+  const lineSendState = {
+    id: bill.id,
+    status: bill.status,
+    pdfStatus: bill.pdfStatus,
+    sentAt: bill.sentAt?.toISOString() ?? null,
   };
 
   return (
@@ -97,6 +104,7 @@ export default async function BillDetailPage({ params }: PageProps) {
         </CardContent>
       </Card>
       <BillPdfPanel initialBill={pdfState} />
+      <BillLineSendButton initialBill={lineSendState} />
     </div>
   );
 }

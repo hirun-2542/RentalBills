@@ -8,6 +8,7 @@ import {
 import { POST as generatePdf } from "@/app/api/bills/[id]/generate/route";
 import { POST as markPaid } from "@/app/api/bills/[id]/paid/route";
 import { GET as getBillQr } from "@/app/api/bills/[id]/qr/route";
+import { POST as sendBill } from "@/app/api/bills/[id]/send/route";
 import { GET, POST } from "@/app/api/bills/route";
 
 const mocks = vi.hoisted(() => ({
@@ -30,6 +31,7 @@ const mocks = vi.hoisted(() => ({
     $transaction: vi.fn(),
   },
   generatePromptPayQR: vi.fn(),
+  sendBillMessages: vi.fn(),
   inngest: {
     send: vi.fn(),
   },
@@ -49,6 +51,10 @@ vi.mock("@/lib/inngest", () => ({
 
 vi.mock("@/lib/promptpay", () => ({
   generatePromptPayQR: mocks.generatePromptPayQR,
+}));
+
+vi.mock("@/lib/line", () => ({
+  sendBillMessages: mocks.sendBillMessages,
 }));
 
 function jsonRequest(body: unknown) {
@@ -117,6 +123,8 @@ describe("Ticket 006 bill API routes", () => {
     }));
     mocks.db.$transaction.mockImplementation(async (operations) => operations);
     mocks.generatePromptPayQR.mockResolvedValue(Buffer.from("png"));
+    mocks.sendBillMessages.mockResolvedValue(undefined);
+    process.env.NEXTAUTH_URL = "https://rental.test";
   });
 
   it("POST /api/bills creates all bills in one transaction", async () => {
@@ -523,6 +531,205 @@ describe("Ticket 006 bill API routes", () => {
     expect(mocks.generatePromptPayQR).not.toHaveBeenCalled();
   });
 
+  it("POST /api/bills/:id/send returns 422 when PDF is not done", async () => {
+    mocks.db.bill.findUnique.mockResolvedValue({
+      pdfStatus: PdfStatus.NONE,
+      status: BillStatus.DRAFT,
+      tenant: { lineUserId: "U123" },
+      room: { number: "101" },
+    });
+
+    const response = await sendBill(new Request("http://localhost"), {
+      params: Promise.resolve({ id: "bill-1" }),
+    });
+
+    await expect(response.json()).resolves.toEqual({
+      error: "กรุณาสร้าง PDF ก่อนส่ง",
+    });
+    expect(response.status).toBe(422);
+    expect(mocks.sendBillMessages).not.toHaveBeenCalled();
+    expect(mocks.db.bill.update).not.toHaveBeenCalled();
+  });
+
+  it("POST /api/bills/:id/send returns 404 when the bill is missing", async () => {
+    mocks.db.bill.findUnique.mockResolvedValue(null);
+
+    const response = await sendBill(new Request("http://localhost"), {
+      params: Promise.resolve({ id: "bill-1" }),
+    });
+
+    await expect(response.json()).resolves.toEqual({ error: "Bill not found" });
+    expect(response.status).toBe(404);
+    expect(mocks.sendBillMessages).not.toHaveBeenCalled();
+    expect(mocks.db.bill.update).not.toHaveBeenCalled();
+  });
+
+  it("POST /api/bills/:id/send returns 422 when tenant has no LINE User ID", async () => {
+    mocks.db.bill.findUnique.mockResolvedValue({
+      pdfStatus: PdfStatus.DONE,
+      status: BillStatus.DRAFT,
+      tenant: { lineUserId: null },
+      room: { number: "101" },
+    });
+
+    const response = await sendBill(new Request("http://localhost"), {
+      params: Promise.resolve({ id: "bill-1" }),
+    });
+
+    await expect(response.json()).resolves.toEqual({
+      error: "ผู้เช่ายังไม่มี LINE User ID กรุณาเพิ่มใน Rooms",
+    });
+    expect(response.status).toBe(422);
+    expect(mocks.sendBillMessages).not.toHaveBeenCalled();
+    expect(mocks.db.bill.update).not.toHaveBeenCalled();
+  });
+
+  it("POST /api/bills/:id/send returns 409 when bill is already paid", async () => {
+    mocks.db.bill.findUnique.mockResolvedValue({
+      pdfStatus: PdfStatus.DONE,
+      status: BillStatus.PAID,
+      tenant: { lineUserId: "U123" },
+      room: { number: "101" },
+    });
+
+    const response = await sendBill(new Request("http://localhost"), {
+      params: Promise.resolve({ id: "bill-1" }),
+    });
+
+    await expect(response.json()).resolves.toEqual({
+      error: "บิลนี้ชำระแล้ว",
+    });
+    expect(response.status).toBe(409);
+    expect(mocks.sendBillMessages).not.toHaveBeenCalled();
+    expect(mocks.db.bill.update).not.toHaveBeenCalled();
+  });
+
+  it("POST /api/bills/:id/send sends LINE messages and marks bill as sent", async () => {
+    mocks.db.bill.findUnique.mockResolvedValue({
+      id: "bill-1",
+      month: 6,
+      year: 2026,
+      pdfStatus: PdfStatus.DONE,
+      status: BillStatus.DRAFT,
+      waterUsage: 5,
+      waterRatePerUnit: decimal(9),
+      waterCollectionFee: decimal(10),
+      waterTotal: decimal(55),
+      elecUsage: 20,
+      elecRatePerUnit: decimal(4.75),
+      elecTotal: decimal(95),
+      rent: decimal(3000),
+      total: decimal(3150),
+      tenant: { lineUserId: "U123" },
+      room: { number: "101" },
+    });
+    mocks.db.bill.update.mockResolvedValue({
+      id: "bill-1",
+      status: BillStatus.SENT,
+      pdfStatus: PdfStatus.DONE,
+      sentAt: new Date("2026-06-14T00:00:00.000Z"),
+      tenant: { lineUserId: "U123" },
+      room: { number: "101" },
+    });
+
+    const response = await sendBill(new Request("http://localhost"), {
+      params: Promise.resolve({ id: "bill-1" }),
+    });
+
+    await expect(response.json()).resolves.toMatchObject({
+      id: "bill-1",
+      status: BillStatus.SENT,
+      sentAt: "2026-06-14T00:00:00.000Z",
+    });
+    expect(response.status).toBe(200);
+    expect(mocks.sendBillMessages).toHaveBeenCalledWith("U123", [
+      expect.objectContaining({
+        type: "text",
+        text: expect.stringContaining(
+          "[ห้อง 101] บิลค่าน้ำ-ค่าไฟ เดือน 6/2026"
+        ),
+      }),
+      {
+        type: "image",
+        originalContentUrl: "https://rental.test/api/bills/bill-1/qr",
+        previewImageUrl: "https://rental.test/api/bills/bill-1/qr",
+      },
+    ]);
+    expect(mocks.db.bill.update).toHaveBeenCalledWith({
+      where: { id: "bill-1" },
+      data: {
+        status: BillStatus.SENT,
+        sentAt: expect.any(Date),
+      },
+      include: { tenant: true, room: true },
+    });
+  });
+
+  it("POST /api/bills/:id/send returns 500 when NEXTAUTH_URL is missing", async () => {
+    process.env.NEXTAUTH_URL = "";
+    mocks.db.bill.findUnique.mockResolvedValue({
+      id: "bill-1",
+      month: 6,
+      year: 2026,
+      pdfStatus: PdfStatus.DONE,
+      status: BillStatus.DRAFT,
+      waterUsage: 5,
+      waterRatePerUnit: decimal(9),
+      waterCollectionFee: decimal(10),
+      waterTotal: decimal(55),
+      elecUsage: 20,
+      elecRatePerUnit: decimal(4.75),
+      elecTotal: decimal(95),
+      rent: decimal(3000),
+      total: decimal(3150),
+      tenant: { lineUserId: "U123" },
+      room: { number: "101" },
+    });
+
+    const response = await sendBill(new Request("http://localhost"), {
+      params: Promise.resolve({ id: "bill-1" }),
+    });
+
+    await expect(response.json()).resolves.toEqual({
+      error: "NEXTAUTH_URL is not configured",
+    });
+    expect(response.status).toBe(500);
+    expect(mocks.sendBillMessages).not.toHaveBeenCalled();
+    expect(mocks.db.bill.update).not.toHaveBeenCalled();
+  });
+
+  it("POST /api/bills/:id/send returns 502 when LINE push fails", async () => {
+    mocks.sendBillMessages.mockRejectedValue(new Error("LINE failed"));
+    mocks.db.bill.findUnique.mockResolvedValue({
+      id: "bill-1",
+      month: 6,
+      year: 2026,
+      pdfStatus: PdfStatus.DONE,
+      status: BillStatus.DRAFT,
+      waterUsage: 5,
+      waterRatePerUnit: decimal(9),
+      waterCollectionFee: decimal(10),
+      waterTotal: decimal(55),
+      elecUsage: 20,
+      elecRatePerUnit: decimal(4.75),
+      elecTotal: decimal(95),
+      rent: decimal(3000),
+      total: decimal(3150),
+      tenant: { lineUserId: "U123" },
+      room: { number: "101" },
+    });
+
+    const response = await sendBill(new Request("http://localhost"), {
+      params: Promise.resolve({ id: "bill-1" }),
+    });
+
+    await expect(response.json()).resolves.toEqual({
+      error: "ส่ง LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
+    });
+    expect(response.status).toBe(502);
+    expect(mocks.db.bill.update).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["GET /api/bills", () => GET(new Request("http://localhost/api/bills"))],
     [
@@ -561,6 +768,13 @@ describe("Ticket 006 bill API routes", () => {
       "POST /api/bills/:id/generate",
       () =>
         generatePdf(new Request("http://localhost"), {
+          params: Promise.resolve({ id: "bill-1" }),
+        }),
+    ],
+    [
+      "POST /api/bills/:id/send",
+      () =>
+        sendBill(new Request("http://localhost"), {
           params: Promise.resolve({ id: "bill-1" }),
         }),
     ],
