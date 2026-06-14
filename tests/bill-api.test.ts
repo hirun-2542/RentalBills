@@ -1,10 +1,11 @@
-import { BillStatus, Prisma } from "@prisma/client";
+import { BillStatus, PdfStatus, Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DELETE,
   GET as getBill,
   PUT,
 } from "@/app/api/bills/[id]/route";
+import { POST as generatePdf } from "@/app/api/bills/[id]/generate/route";
 import { POST as markPaid } from "@/app/api/bills/[id]/paid/route";
 import { GET, POST } from "@/app/api/bills/route";
 
@@ -17,6 +18,7 @@ const mocks = vi.hoisted(() => ({
       findMany: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     room: {
       findMany: vi.fn(),
@@ -26,6 +28,9 @@ const mocks = vi.hoisted(() => ({
     },
     $transaction: vi.fn(),
   },
+  inngest: {
+    send: vi.fn(),
+  },
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -34,6 +39,10 @@ vi.mock("@/lib/auth", () => ({
 
 vi.mock("@/lib/db", () => ({
   db: mocks.db,
+}));
+
+vi.mock("@/lib/inngest", () => ({
+  inngest: mocks.inngest,
 }));
 
 function jsonRequest(body: unknown) {
@@ -373,6 +382,61 @@ describe("Ticket 006 bill API routes", () => {
     });
   });
 
+  it("POST /api/bills/:id/generate queues PDF generation", async () => {
+    mocks.db.bill.updateMany.mockResolvedValue({ count: 1 });
+    mocks.inngest.send.mockResolvedValue(undefined);
+
+    const response = await generatePdf(new Request("http://localhost"), {
+      params: Promise.resolve({ id: "bill-1" }),
+    });
+
+    await expect(response.json()).resolves.toEqual({ status: "queued" });
+    expect(response.status).toBe(202);
+    expect(mocks.db.bill.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "bill-1",
+        pdfStatus: { notIn: [PdfStatus.PENDING, PdfStatus.PROCESSING] },
+      },
+      data: {
+        pdfStatus: PdfStatus.PENDING,
+        pdfError: null,
+        pdfUrl: null,
+      },
+    });
+    expect(mocks.inngest.send).toHaveBeenCalledWith({
+      name: "bill/pdf.generate",
+      data: { billId: "bill-1" },
+    });
+  });
+
+  it("POST /api/bills/:id/generate returns 409 while PDF is generating", async () => {
+    mocks.db.bill.updateMany.mockResolvedValue({ count: 0 });
+    mocks.db.bill.findUnique.mockResolvedValue({
+      pdfStatus: PdfStatus.PROCESSING,
+    });
+
+    const response = await generatePdf(new Request("http://localhost"), {
+      params: Promise.resolve({ id: "bill-1" }),
+    });
+
+    await expect(response.json()).resolves.toMatchObject({
+      error: "กำลังสร้าง PDF อยู่",
+    });
+    expect(response.status).toBe(409);
+    expect(mocks.db.bill.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "bill-1",
+        pdfStatus: { notIn: [PdfStatus.PENDING, PdfStatus.PROCESSING] },
+      },
+      data: {
+        pdfStatus: PdfStatus.PENDING,
+        pdfError: null,
+        pdfUrl: null,
+      },
+    });
+    expect(mocks.inngest.send).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["GET /api/bills", () => GET(new Request("http://localhost/api/bills"))],
     [
@@ -404,6 +468,13 @@ describe("Ticket 006 bill API routes", () => {
       "POST /api/bills/:id/paid",
       () =>
         markPaid(new Request("http://localhost"), {
+          params: Promise.resolve({ id: "bill-1" }),
+        }),
+    ],
+    [
+      "POST /api/bills/:id/generate",
+      () =>
+        generatePdf(new Request("http://localhost"), {
           params: Promise.resolve({ id: "bill-1" }),
         }),
     ],
