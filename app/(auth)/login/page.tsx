@@ -27,7 +27,6 @@ export default function LoginPage() {
       username: formData.get("username"),
       password: formData.get("password"),
       redirect: false,
-      redirectTo: "/",
     });
 
     setIsSubmitting(false);

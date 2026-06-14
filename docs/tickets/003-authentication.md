@@ -25,11 +25,13 @@ Out of scope:
 - `middleware.ts`
 - `app/(dashboard)/layout.tsx` (เพิ่ม logout button)
 - `package.json` (เพิ่ม bcryptjs)
-- `.env.example` (ยืนยัน NEXTAUTH_SECRET, ADMIN_USERNAME, ADMIN_PASSWORD_HASH)
+- `.env.example` (ยืนยัน AUTH_SECRET, ADMIN_USERNAME, ADMIN_PASSWORD_HASH)
 
 ## Implementation steps
 
-1. `npm install next-auth@beta bcryptjs` + `npm install -D @types/bcryptjs`
+1. `npm install next-auth@beta bcryptjs`
+   - `next-auth@beta` is intentional because this ticket targets NextAuth v5.
+   - Do not install `@types/bcryptjs`; `bcryptjs@3` ships its own TypeScript types.
 2. สร้าง `lib/auth.ts`:
    - Credentials provider: รับ username + password
    - ตรวจ username ตรงกับ `ADMIN_USERNAME`
@@ -41,7 +43,7 @@ Out of scope:
    - path `/login` → redirect ไป `/` ถ้ามี session อยู่แล้ว
 5. สร้าง login page (`app/(auth)/login/page.tsx`):
    - Form: username + password input
-   - `signIn("credentials", { username, password, redirectTo: "/" })`
+   - `signIn("credentials", { username, password, redirect: false })` แล้ว redirect สำเร็จด้วย `router.push("/")`
    - แสดง error message ถ้า login ผิด
 6. เพิ่ม logout button ใน `app/(dashboard)/layout.tsx`:
    - `signOut({ redirectTo: "/login" })`
@@ -66,9 +68,10 @@ Out of scope:
 
 Implement Ticket 003 only.
 
-Install `next-auth@beta` and `bcryptjs` (with `@types/bcryptjs` as dev dep).
+Install `next-auth@beta` and `bcryptjs`. Do not install `@types/bcryptjs`; `bcryptjs@3` includes its own types.
 
 Create `lib/auth.ts` with NextAuth v5 config using Credentials provider:
+- Use `session: { strategy: "jwt" }`.
 - Accept `{ username: string, password: string }`
 - Compare username against `process.env.ADMIN_USERNAME`
 - Compare password against `process.env.ADMIN_PASSWORD_HASH` using `bcryptjs.compare`
@@ -79,6 +82,7 @@ Create `app/api/auth/[...nextauth]/route.ts` that exports GET and POST handlers 
 Create `middleware.ts` that:
 - Redirects unauthenticated users from any `/(dashboard)` path to `/login`
 - Redirects authenticated users away from `/login` to `/`
+- Middleware intentionally protects page routes only. API routes must validate session inside each route handler.
 
 Create `app/(auth)/login/page.tsx` with a form (username + password fields, submit button). On submit call `signIn("credentials", ...)`. Show an error message if login fails. Style with shadcn/ui Card, Input, Button components.
 
