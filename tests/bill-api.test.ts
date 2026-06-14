@@ -551,6 +551,19 @@ describe("Ticket 006 bill API routes", () => {
     expect(mocks.db.bill.update).not.toHaveBeenCalled();
   });
 
+  it("POST /api/bills/:id/send returns 404 when the bill is missing", async () => {
+    mocks.db.bill.findUnique.mockResolvedValue(null);
+
+    const response = await sendBill(new Request("http://localhost"), {
+      params: Promise.resolve({ id: "bill-1" }),
+    });
+
+    await expect(response.json()).resolves.toEqual({ error: "Bill not found" });
+    expect(response.status).toBe(404);
+    expect(mocks.sendBillMessages).not.toHaveBeenCalled();
+    expect(mocks.db.bill.update).not.toHaveBeenCalled();
+  });
+
   it("POST /api/bills/:id/send returns 422 when tenant has no LINE User ID", async () => {
     mocks.db.bill.findUnique.mockResolvedValue({
       pdfStatus: PdfStatus.DONE,
@@ -650,6 +663,71 @@ describe("Ticket 006 bill API routes", () => {
       },
       include: { tenant: true, room: true },
     });
+  });
+
+  it("POST /api/bills/:id/send returns 500 when NEXTAUTH_URL is missing", async () => {
+    process.env.NEXTAUTH_URL = "";
+    mocks.db.bill.findUnique.mockResolvedValue({
+      id: "bill-1",
+      month: 6,
+      year: 2026,
+      pdfStatus: PdfStatus.DONE,
+      status: BillStatus.DRAFT,
+      waterUsage: 5,
+      waterRatePerUnit: decimal(9),
+      waterCollectionFee: decimal(10),
+      waterTotal: decimal(55),
+      elecUsage: 20,
+      elecRatePerUnit: decimal(4.75),
+      elecTotal: decimal(95),
+      rent: decimal(3000),
+      total: decimal(3150),
+      tenant: { lineUserId: "U123" },
+      room: { number: "101" },
+    });
+
+    const response = await sendBill(new Request("http://localhost"), {
+      params: Promise.resolve({ id: "bill-1" }),
+    });
+
+    await expect(response.json()).resolves.toEqual({
+      error: "NEXTAUTH_URL is not configured",
+    });
+    expect(response.status).toBe(500);
+    expect(mocks.sendBillMessages).not.toHaveBeenCalled();
+    expect(mocks.db.bill.update).not.toHaveBeenCalled();
+  });
+
+  it("POST /api/bills/:id/send returns 502 when LINE push fails", async () => {
+    mocks.sendBillMessages.mockRejectedValue(new Error("LINE failed"));
+    mocks.db.bill.findUnique.mockResolvedValue({
+      id: "bill-1",
+      month: 6,
+      year: 2026,
+      pdfStatus: PdfStatus.DONE,
+      status: BillStatus.DRAFT,
+      waterUsage: 5,
+      waterRatePerUnit: decimal(9),
+      waterCollectionFee: decimal(10),
+      waterTotal: decimal(55),
+      elecUsage: 20,
+      elecRatePerUnit: decimal(4.75),
+      elecTotal: decimal(95),
+      rent: decimal(3000),
+      total: decimal(3150),
+      tenant: { lineUserId: "U123" },
+      room: { number: "101" },
+    });
+
+    const response = await sendBill(new Request("http://localhost"), {
+      params: Promise.resolve({ id: "bill-1" }),
+    });
+
+    await expect(response.json()).resolves.toEqual({
+      error: "ส่ง LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
+    });
+    expect(response.status).toBe(502);
+    expect(mocks.db.bill.update).not.toHaveBeenCalled();
   });
 
   it.each([

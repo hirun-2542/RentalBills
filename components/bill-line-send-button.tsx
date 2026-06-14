@@ -1,7 +1,7 @@
 "use client";
 
 import { Loader2, Send } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 type BillLineSendState = {
@@ -54,6 +54,16 @@ export function BillLineSendButton({
   } | null>(null);
   const disabledReason = getDisabledReason(bill);
   const disabled = submitting || !!disabledReason;
+
+  useEffect(() => {
+    if (!notice) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => setNotice(null), 4000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [notice]);
 
   async function sendLine() {
     setSubmitting(true);

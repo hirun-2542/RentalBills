@@ -75,10 +75,7 @@ export async function POST(_request: Request, { params }: RouteContext) {
   }
 
   const { id } = await params;
-  const [bill] = await Promise.all([
-    findBillForSend(id),
-    db.settings.findUnique({ where: { id: "singleton" } }),
-  ]);
+  const bill = await findBillForSend(id);
 
   if (!bill) {
     return NextResponse.json({ error: "Bill not found" }, { status: 404 });
@@ -102,7 +99,16 @@ export async function POST(_request: Request, { params }: RouteContext) {
     return NextResponse.json({ error: "บิลนี้ชำระแล้ว" }, { status: 409 });
   }
 
-  const qrUrl = `${process.env.NEXTAUTH_URL}/api/bills/${id}/qr`;
+  const appUrl = process.env.NEXTAUTH_URL;
+
+  if (!appUrl) {
+    return NextResponse.json(
+      { error: "NEXTAUTH_URL is not configured" },
+      { status: 500 }
+    );
+  }
+
+  const qrUrl = `${appUrl}/api/bills/${id}/qr`;
   const textMsg = buildTextMessage(bill);
   const imageMsg: messagingApi.ImageMessage = {
     type: "image",
@@ -110,7 +116,14 @@ export async function POST(_request: Request, { params }: RouteContext) {
     previewImageUrl: qrUrl,
   };
 
-  await sendBillMessages(bill.tenant.lineUserId, [textMsg, imageMsg]);
+  try {
+    await sendBillMessages(bill.tenant.lineUserId, [textMsg, imageMsg]);
+  } catch {
+    return NextResponse.json(
+      { error: "ส่ง LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" },
+      { status: 502 }
+    );
+  }
 
   const updatedBill = await db.bill.update({
     where: { id },
