@@ -9,6 +9,11 @@ type PageProps = {
 
 export const dynamic = "force-dynamic";
 
+const bahtFormatter = new Intl.NumberFormat("th-TH", {
+  style: "currency",
+  currency: "THB",
+});
+
 export default async function BillDetailPage({ params }: PageProps) {
   const { id } = await params;
   const bill = await db.bill.findUnique({
@@ -19,6 +24,12 @@ export default async function BillDetailPage({ params }: PageProps) {
   if (!bill) {
     notFound();
   }
+
+  const settings = await db.settings.upsert({
+    where: { id: "singleton" },
+    update: {},
+    create: { id: "singleton" },
+  });
 
   const pdfState: BillPdfState = {
     id: bill.id,
@@ -43,7 +54,37 @@ export default async function BillDetailPage({ params }: PageProps) {
           </div>
           <div>
             <span className="text-muted-foreground">ยอดรวม</span>
-            <div>{bill.total.toString()}</div>
+            <div>{bahtFormatter.format(bill.total.toNumber())}</div>
+          </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>ชำระเงิน</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 text-sm md:grid-cols-[250px_1fr]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`/api/bills/${bill.id}/qr`}
+            alt="QR PromptPay"
+            width={250}
+            height={250}
+          />
+          <div className="space-y-3">
+            <div>
+              <span className="text-muted-foreground">ยอดที่ต้องชำระ</span>
+              <div className="text-lg font-semibold">
+                {bahtFormatter.format(bill.total.toNumber())}
+              </div>
+            </div>
+            <div>
+              <span className="text-muted-foreground">ชื่อบัญชี</span>
+              <div>{settings.bankAccountName || "-"}</div>
+            </div>
+            <div>
+              <span className="text-muted-foreground">เลขบัญชีธนาคาร</span>
+              <div>{settings.bankAccountNumber || "-"}</div>
+            </div>
           </div>
         </CardContent>
       </Card>

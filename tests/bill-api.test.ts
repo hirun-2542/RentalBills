@@ -7,6 +7,7 @@ import {
 } from "@/app/api/bills/[id]/route";
 import { POST as generatePdf } from "@/app/api/bills/[id]/generate/route";
 import { POST as markPaid } from "@/app/api/bills/[id]/paid/route";
+import { GET as getBillQr } from "@/app/api/bills/[id]/qr/route";
 import { GET, POST } from "@/app/api/bills/route";
 
 const mocks = vi.hoisted(() => ({
@@ -25,9 +26,11 @@ const mocks = vi.hoisted(() => ({
     },
     settings: {
       findUnique: vi.fn(),
+      upsert: vi.fn(),
     },
     $transaction: vi.fn(),
   },
+  generatePromptPayQR: vi.fn(),
   inngest: {
     send: vi.fn(),
   },
@@ -43,6 +46,10 @@ vi.mock("@/lib/db", () => ({
 
 vi.mock("@/lib/inngest", () => ({
   inngest: mocks.inngest,
+}));
+
+vi.mock("@/lib/promptpay", () => ({
+  generatePromptPayQR: mocks.generatePromptPayQR,
 }));
 
 function jsonRequest(body: unknown) {
@@ -87,6 +94,11 @@ describe("Ticket 006 bill API routes", () => {
       waterCollectionFee: decimal(10),
       elecRatePerUnit: decimal(4.75),
     });
+    mocks.db.settings.upsert.mockResolvedValue({
+      promptpayNumber: "0812345678",
+      bankAccountNumber: "123-4-56789-0",
+      bankAccountName: "Rental Bills",
+    });
     mocks.db.room.findMany.mockResolvedValue([
       {
         id: "room-101",
@@ -107,6 +119,7 @@ describe("Ticket 006 bill API routes", () => {
       ...data,
     }));
     mocks.db.$transaction.mockImplementation(async (operations) => operations);
+    mocks.generatePromptPayQR.mockResolvedValue(Buffer.from("png"));
   });
 
   it("POST /api/bills creates all bills in one transaction", async () => {
@@ -437,6 +450,62 @@ describe("Ticket 006 bill API routes", () => {
     expect(mocks.inngest.send).not.toHaveBeenCalled();
   });
 
+  it("GET /api/bills/:id/qr returns a PromptPay QR PNG", async () => {
+    mocks.db.bill.findUnique.mockResolvedValue({
+      total: decimal(3150),
+    });
+
+    const response = await getBillQr(new Request("http://localhost"), {
+      params: Promise.resolve({ id: "bill-1" }),
+    });
+
+    await expect(response.text()).resolves.toBe("png");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe("image/png");
+    expect(mocks.db.bill.findUnique).toHaveBeenCalledWith({
+      where: { id: "bill-1" },
+      select: { total: true },
+    });
+    expect(mocks.db.settings.upsert).toHaveBeenCalledWith({
+      where: { id: "singleton" },
+      update: {},
+      create: { id: "singleton" },
+    });
+    expect(mocks.generatePromptPayQR).toHaveBeenCalledWith("0812345678", 3150);
+  });
+
+  it("GET /api/bills/:id/qr returns 422 when PromptPay is not configured", async () => {
+    mocks.db.bill.findUnique.mockResolvedValue({
+      total: decimal(3150),
+    });
+    mocks.db.settings.upsert.mockResolvedValue({
+      promptpayNumber: "",
+    });
+
+    const response = await getBillQr(new Request("http://localhost"), {
+      params: Promise.resolve({ id: "bill-1" }),
+    });
+
+    await expect(response.json()).resolves.toEqual({
+      error: "ยังไม่ได้ตั้งค่า PromptPay",
+    });
+    expect(response.status).toBe(422);
+    expect(mocks.generatePromptPayQR).not.toHaveBeenCalled();
+  });
+
+  it("GET /api/bills/:id/qr returns 404 when the bill is missing", async () => {
+    mocks.db.bill.findUnique.mockResolvedValue(null);
+
+    const response = await getBillQr(new Request("http://localhost"), {
+      params: Promise.resolve({ id: "bill-1" }),
+    });
+
+    await expect(response.json()).resolves.toEqual({ error: "Bill not found" });
+    expect(response.status).toBe(404);
+    expect(mocks.db.settings.upsert).not.toHaveBeenCalled();
+    expect(mocks.generatePromptPayQR).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["GET /api/bills", () => GET(new Request("http://localhost/api/bills"))],
     [
@@ -475,6 +544,13 @@ describe("Ticket 006 bill API routes", () => {
       "POST /api/bills/:id/generate",
       () =>
         generatePdf(new Request("http://localhost"), {
+          params: Promise.resolve({ id: "bill-1" }),
+        }),
+    ],
+    [
+      "GET /api/bills/:id/qr",
+      () =>
+        getBillQr(new Request("http://localhost"), {
           params: Promise.resolve({ id: "bill-1" }),
         }),
     ],
