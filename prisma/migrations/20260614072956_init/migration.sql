@@ -9,7 +9,7 @@ CREATE TABLE "Room" (
     "id" TEXT NOT NULL,
     "number" TEXT NOT NULL,
     "description" TEXT,
-    "rent" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "rent" DECIMAL(10,2) NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Room_pkey" PRIMARY KEY ("id")
@@ -38,16 +38,16 @@ CREATE TABLE "Bill" (
     "waterPrevReading" DOUBLE PRECISION NOT NULL,
     "waterCurrReading" DOUBLE PRECISION NOT NULL,
     "waterUsage" DOUBLE PRECISION NOT NULL,
-    "waterRatePerUnit" DOUBLE PRECISION NOT NULL,
-    "waterCollectionFee" DOUBLE PRECISION NOT NULL,
-    "waterTotal" DOUBLE PRECISION NOT NULL,
+    "waterRatePerUnit" DECIMAL(10,2) NOT NULL,
+    "waterCollectionFee" DECIMAL(10,2) NOT NULL,
+    "waterTotal" DECIMAL(10,2) NOT NULL,
     "elecPrevReading" DOUBLE PRECISION NOT NULL,
     "elecCurrReading" DOUBLE PRECISION NOT NULL,
     "elecUsage" DOUBLE PRECISION NOT NULL,
-    "elecRatePerUnit" DOUBLE PRECISION NOT NULL,
-    "elecTotal" DOUBLE PRECISION NOT NULL,
-    "rent" DOUBLE PRECISION NOT NULL,
-    "total" DOUBLE PRECISION NOT NULL,
+    "elecRatePerUnit" DECIMAL(10,2) NOT NULL,
+    "elecTotal" DECIMAL(10,2) NOT NULL,
+    "rent" DECIMAL(10,2) NOT NULL,
+    "total" DECIMAL(10,2) NOT NULL,
     "status" "BillStatus" NOT NULL DEFAULT 'DRAFT',
     "pdfStatus" "PdfStatus" NOT NULL DEFAULT 'NONE',
     "pdfError" TEXT,
@@ -74,9 +74,9 @@ CREATE TABLE "PaymentSlip" (
 -- CreateTable
 CREATE TABLE "Settings" (
     "id" TEXT NOT NULL DEFAULT 'singleton',
-    "waterRatePerUnit" DOUBLE PRECISION NOT NULL DEFAULT 9,
-    "waterCollectionFee" DOUBLE PRECISION NOT NULL DEFAULT 10,
-    "elecRatePerUnit" DOUBLE PRECISION NOT NULL DEFAULT 4.75,
+    "waterRatePerUnit" DECIMAL(10,2) NOT NULL DEFAULT 9,
+    "waterCollectionFee" DECIMAL(10,2) NOT NULL DEFAULT 10,
+    "elecRatePerUnit" DECIMAL(10,2) NOT NULL DEFAULT 4.75,
     "bankAccountNumber" TEXT NOT NULL DEFAULT '',
     "bankAccountName" TEXT NOT NULL DEFAULT '',
     "promptpayNumber" TEXT NOT NULL DEFAULT '',
@@ -89,7 +89,13 @@ CREATE TABLE "Settings" (
 CREATE UNIQUE INDEX "Room_number_key" ON "Room"("number");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Tenant_roomId_key" ON "Tenant"("roomId");
+CREATE UNIQUE INDEX "tenant_room_active" ON "Tenant"("roomId") WHERE active = true;
+
+-- CreateIndex
+CREATE INDEX "Bill_roomId_idx" ON "Bill"("roomId");
+
+-- CreateIndex
+CREATE INDEX "Bill_year_month_idx" ON "Bill"("year", "month");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Bill_tenantId_month_year_key" ON "Bill"("tenantId", "month", "year");
@@ -104,4 +110,4 @@ ALTER TABLE "Bill" ADD CONSTRAINT "Bill_tenantId_fkey" FOREIGN KEY ("tenantId") 
 ALTER TABLE "Bill" ADD CONSTRAINT "Bill_roomId_fkey" FOREIGN KEY ("roomId") REFERENCES "Room"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "PaymentSlip" ADD CONSTRAINT "PaymentSlip_billId_fkey" FOREIGN KEY ("billId") REFERENCES "Bill"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "PaymentSlip" ADD CONSTRAINT "PaymentSlip_billId_fkey" FOREIGN KEY ("billId") REFERENCES "Bill"("id") ON DELETE CASCADE ON UPDATE CASCADE;

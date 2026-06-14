@@ -22,18 +22,30 @@ async function main() {
       create: roomData,
     });
 
-    await prisma.tenant.upsert({
-      where: { roomId: room.id },
-      update: {
-        name: `ผู้เช่า ${roomData.number}`,
-        active: true,
-      },
-      create: {
+    const activeTenant = await prisma.tenant.findFirst({
+      where: {
         roomId: room.id,
-        name: `ผู้เช่า ${roomData.number}`,
         active: true,
       },
     });
+
+    if (activeTenant) {
+      await prisma.tenant.update({
+        where: { id: activeTenant.id },
+        data: {
+          name: `ผู้เช่า ${roomData.number}`,
+          active: true,
+        },
+      });
+    } else {
+      await prisma.tenant.create({
+        data: {
+          roomId: room.id,
+          name: `ผู้เช่า ${roomData.number}`,
+          active: true,
+        },
+      });
+    }
   }
 }
 
