@@ -69,25 +69,32 @@ export function BillLineSendButton({
     setSubmitting(true);
     setNotice(null);
 
-    const response = await fetch(`/api/bills/${bill.id}/send`, {
-      method: "POST",
-    });
+    try {
+      const response = await fetch(`/api/bills/${bill.id}/send`, {
+        method: "POST",
+      });
 
-    if (!response.ok) {
-      setNotice({ type: "error", message: await readApiError(response) });
+      if (!response.ok) {
+        setNotice({ type: "error", message: await readApiError(response) });
+        return;
+      }
+
+      const nextBill = (await response.json()) as BillSendResponse;
+      setBill({
+        id: nextBill.id,
+        status: nextBill.status,
+        pdfStatus: nextBill.pdfStatus,
+        sentAt: nextBill.sentAt,
+      });
+      setNotice({ type: "success", message: "ส่ง LINE สำเร็จ" });
+    } catch {
+      setNotice({
+        type: "error",
+        message: "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้ กรุณาลองใหม่อีกครั้ง",
+      });
+    } finally {
       setSubmitting(false);
-      return;
     }
-
-    const nextBill = (await response.json()) as BillSendResponse;
-    setBill({
-      id: nextBill.id,
-      status: nextBill.status,
-      pdfStatus: nextBill.pdfStatus,
-      sentAt: nextBill.sentAt,
-    });
-    setNotice({ type: "success", message: "ส่ง LINE สำเร็จ" });
-    setSubmitting(false);
   }
 
   return (
