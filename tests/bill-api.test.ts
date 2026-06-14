@@ -493,6 +493,23 @@ describe("Ticket 006 bill API routes", () => {
     }
   );
 
+  it("GET /api/bills/:id/qr returns 422 when settings are missing", async () => {
+    mocks.db.bill.findUnique.mockResolvedValue({
+      total: decimal(3150),
+    });
+    mocks.db.settings.findUnique.mockResolvedValue(null);
+
+    const response = await getBillQr(new Request("http://localhost"), {
+      params: Promise.resolve({ id: "bill-1" }),
+    });
+
+    await expect(response.json()).resolves.toEqual({
+      error: "ยังไม่ได้ตั้งค่า PromptPay",
+    });
+    expect(response.status).toBe(422);
+    expect(mocks.generatePromptPayQR).not.toHaveBeenCalled();
+  });
+
   it("GET /api/bills/:id/qr returns 404 when the bill is missing", async () => {
     mocks.db.bill.findUnique.mockResolvedValue(null);
 

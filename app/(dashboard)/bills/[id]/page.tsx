@@ -28,6 +28,11 @@ export default async function BillDetailPage({ params }: PageProps) {
 
   const settings = (await db.settings.findUnique({
     where: { id: "singleton" },
+    select: {
+      bankAccountName: true,
+      bankAccountNumber: true,
+      promptpayNumber: true,
+    },
   })) ?? {
     bankAccountName: "",
     bankAccountNumber: "",

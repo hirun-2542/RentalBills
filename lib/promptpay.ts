@@ -1,5 +1,5 @@
 import generatePayload from "promptpay-qr";
-import QRCode from "qrcode";
+import { createRequire } from "module";
 import { PassThrough } from "stream";
 
 type LegacyQRCode = {
@@ -9,6 +9,9 @@ type LegacyQRCode = {
     options: { type: "png"; scale: number }
   ): void;
 };
+
+const loadModule = createRequire(import.meta.url);
+const QRCode = loadModule("qrcode") as LegacyQRCode;
 
 export async function generatePromptPayQR(
   promptpayId: string,
@@ -25,7 +28,7 @@ export async function generatePromptPayQR(
     stream.on("error", reject);
   });
 
-  (QRCode as unknown as LegacyQRCode).drawPNGStream(stream, payload, {
+  QRCode.drawPNGStream(stream, payload, {
     type: "png",
     scale: 6,
   });
