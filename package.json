@@ -25,6 +25,8 @@
     "lucide-react": "^0.468.0",
     "next": "^15.3.3",
     "next-auth": "^5.0.0-beta.31",
+    "promptpay-qr": "^0.5.0",
+    "qrcode": "^0.9.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.79.0",
