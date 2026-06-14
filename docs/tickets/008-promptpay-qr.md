@@ -94,3 +94,11 @@ Rules:
 - Do not store QR in DB.
 - Do not add features outside this ticket.
 - Keep diff small. Explain tests run (including manual QR scan test) before finishing.
+
+After implementation:
+1. Run relevant checks (type-check, lint, tests).
+2. Commit the changes.
+3. Push branch `ai/008-promptpay-qr`.
+4. Create a GitHub PR using `gh pr create`.
+5. Do not merge the PR.
+6. Include summary, tests run, risks, and ticket reference (Ticket 008) in the PR description.

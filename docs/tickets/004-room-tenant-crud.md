@@ -114,10 +114,5 @@ Rules:
 - Do not add features outside this ticket.
 - Explain tests run before finishing.
 
-After implementation:
-1. Run relevant checks (type-check, lint, tests).
-2. Commit the changes.
-3. Push branch `ai/004-room-tenant-crud`.
-4. Create a GitHub PR using `gh pr create`.
-5. Do not merge the PR.
-6. Include summary, tests run, risks, and ticket reference (Ticket 004) in the PR description.
+Note: Ticket already completed and merged in PR #5. Do not reopen or recreate
+branch `ai/004-room-tenant-crud`.

@@ -47,7 +47,7 @@ Rules:
 After implementation:
 1. Run relevant checks (type-check, lint, tests).
 2. Commit the changes.
-3. Push branch `ai/00x-<ticket-slug>`.
+3. Push branch `ai/<ticket-id>-<ticket-slug>`.
 4. Create a GitHub PR using `gh pr create`.
 5. Do not merge the PR.
 6. Include summary, tests run, risks, and ticket reference in the PR description.
