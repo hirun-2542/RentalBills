@@ -1,6 +1,10 @@
 import { BillStatus, Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DELETE, PUT } from "@/app/api/bills/[id]/route";
+import {
+  DELETE,
+  GET as getBill,
+  PUT,
+} from "@/app/api/bills/[id]/route";
 import { POST as markPaid } from "@/app/api/bills/[id]/paid/route";
 import { GET, POST } from "@/app/api/bills/route";
 
@@ -99,7 +103,13 @@ describe("Ticket 006 bill API routes", () => {
   it("POST /api/bills creates all bills in one transaction", async () => {
     const response = await POST(jsonRequest(billPayload));
 
-    await expect(response.json()).resolves.toHaveLength(2);
+    await expect(response.json()).resolves.toMatchObject({
+      bills: [
+        expect.objectContaining({ roomId: "room-101" }),
+        expect.objectContaining({ roomId: "room-102" }),
+      ],
+      skipped: [],
+    });
     expect(response.status).toBe(201);
     expect(mocks.db.bill.create).toHaveBeenCalledTimes(2);
     expect(mocks.db.$transaction).toHaveBeenCalledWith(
@@ -174,6 +184,49 @@ describe("Ticket 006 bill API routes", () => {
     );
   });
 
+  it("POST /api/bills returns skipped rooms without active tenants or missing rooms", async () => {
+    mocks.db.room.findMany.mockResolvedValue([
+      {
+        id: "room-101",
+        number: "101",
+        rent: decimal(3000),
+        tenants: [{ id: "tenant-101" }],
+      },
+      {
+        id: "room-102",
+        number: "102",
+        rent: decimal(3500),
+        tenants: [],
+      },
+    ]);
+
+    const response = await POST(
+      jsonRequest({
+        ...billPayload,
+        bills: [
+          ...billPayload.bills,
+          {
+            roomId: "room-999",
+            waterPrevReading: 1,
+            waterCurrReading: 2,
+            elecPrevReading: 1,
+            elecCurrReading: 2,
+          },
+        ],
+      })
+    );
+
+    await expect(response.json()).resolves.toMatchObject({
+      bills: [expect.objectContaining({ roomId: "room-101" })],
+      skipped: [
+        { roomId: "room-102", reason: "No active tenant" },
+        { roomId: "room-999", reason: "Room not found" },
+      ],
+    });
+    expect(response.status).toBe(201);
+    expect(mocks.db.bill.create).toHaveBeenCalledTimes(1);
+  });
+
   it("GET /api/bills filters by month, year, and status", async () => {
     mocks.db.bill.findMany.mockResolvedValue([]);
 
@@ -188,6 +241,80 @@ describe("Ticket 006 bill API routes", () => {
       include: { tenant: true, room: true },
       orderBy: { room: { number: "asc" } },
     });
+  });
+
+  it("GET /api/bills/:id returns bill details", async () => {
+    mocks.db.bill.findUnique.mockResolvedValue({
+      id: "bill-1",
+      total: decimal(3150),
+      tenant: { id: "tenant-101" },
+      room: { id: "room-101", number: "101" },
+      paymentSlips: [],
+    });
+
+    const response = await getBill(new Request("http://localhost"), {
+      params: Promise.resolve({ id: "bill-1" }),
+    });
+
+    await expect(response.json()).resolves.toMatchObject({
+      id: "bill-1",
+      total: 3150,
+      tenant: { id: "tenant-101" },
+      room: { number: "101" },
+      paymentSlips: [],
+    });
+    expect(response.status).toBe(200);
+    expect(mocks.db.bill.findUnique).toHaveBeenCalledWith({
+      where: { id: "bill-1" },
+      include: { tenant: true, room: true, paymentSlips: true },
+    });
+  });
+
+  it("PUT /api/bills/:id recalculates totals with snapshotted rates", async () => {
+    mocks.db.bill.findUnique.mockResolvedValue({
+      status: BillStatus.DRAFT,
+      waterPrevReading: 10,
+      waterCurrReading: 15,
+      waterRatePerUnit: decimal(9),
+      waterCollectionFee: decimal(10),
+      elecPrevReading: 100,
+      elecCurrReading: 120,
+      elecRatePerUnit: decimal(4.75),
+      rent: decimal(3000),
+    });
+    mocks.db.bill.update.mockResolvedValue({
+      id: "bill-1",
+      waterUsage: 10,
+      waterTotal: decimal(100),
+      elecUsage: 30,
+      elecTotal: decimal(142.5),
+      total: decimal(3242.5),
+    });
+
+    const response = await PUT(
+      jsonRequest({ waterCurrReading: 20, elecCurrReading: 130 }),
+      { params: Promise.resolve({ id: "bill-1" }) }
+    );
+
+    await expect(response.json()).resolves.toMatchObject({
+      id: "bill-1",
+      waterTotal: 100,
+      elecTotal: 142.5,
+      total: 3242.5,
+    });
+    expect(response.status).toBe(200);
+    expect(mocks.db.bill.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "bill-1" },
+        data: expect.objectContaining({
+          waterUsage: 10,
+          waterTotal: 100,
+          elecUsage: 30,
+          elecTotal: 142.5,
+          total: 3242.5,
+        }),
+      })
+    );
   });
 
   it("PUT /api/bills/:id returns 409 for SENT bills", async () => {
@@ -244,5 +371,50 @@ describe("Ticket 006 bill API routes", () => {
       },
       include: { tenant: true, room: true },
     });
+  });
+
+  it.each([
+    ["GET /api/bills", () => GET(new Request("http://localhost/api/bills"))],
+    [
+      "POST /api/bills",
+      () => POST(jsonRequest({ month: 6, year: 2026, bills: [] })),
+    ],
+    [
+      "GET /api/bills/:id",
+      () =>
+        getBill(new Request("http://localhost"), {
+          params: Promise.resolve({ id: "bill-1" }),
+        }),
+    ],
+    [
+      "PUT /api/bills/:id",
+      () =>
+        PUT(jsonRequest({ waterCurrReading: 20 }), {
+          params: Promise.resolve({ id: "bill-1" }),
+        }),
+    ],
+    [
+      "DELETE /api/bills/:id",
+      () =>
+        DELETE(new Request("http://localhost"), {
+          params: Promise.resolve({ id: "bill-1" }),
+        }),
+    ],
+    [
+      "POST /api/bills/:id/paid",
+      () =>
+        markPaid(new Request("http://localhost"), {
+          params: Promise.resolve({ id: "bill-1" }),
+        }),
+    ],
+  ])("returns 401 for unauthenticated %s", async (_name, requestHandler) => {
+    mocks.auth.mockResolvedValue(null);
+
+    const response = await requestHandler();
+
+    await expect(response.json()).resolves.toMatchObject({
+      error: "Unauthorized",
+    });
+    expect(response.status).toBe(401);
   });
 });

@@ -211,6 +211,19 @@ export async function POST(request: Request) {
     },
   });
   const roomsById = new Map(rooms.map((room) => [room.id, room]));
+  const skipped = data.bills.flatMap((bill) => {
+    const room = roomsById.get(bill.roomId);
+
+    if (!room) {
+      return [{ roomId: bill.roomId, reason: "Room not found" }];
+    }
+
+    if (!room.tenants[0]) {
+      return [{ roomId: bill.roomId, reason: "No active tenant" }];
+    }
+
+    return [];
+  });
   const billableRooms = rooms.filter((room) => room.tenants[0]);
   const tenantIds = billableRooms.map((room) => room.tenants[0].id);
 
@@ -284,7 +297,10 @@ export async function POST(request: Request) {
 
   try {
     const createdBills = await db.$transaction(createOperations);
-    return NextResponse.json(serialize(createdBills), { status: 201 });
+    return NextResponse.json(
+      { bills: serialize(createdBills), skipped },
+      { status: 201 }
+    );
   } catch (error) {
     if (isPrismaErrorCode(error, "P2002")) {
       const duplicateRooms = await db.bill.findMany({

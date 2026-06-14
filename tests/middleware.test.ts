@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { NextRequest } from "next/server";
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn((handler) => handler),
@@ -16,13 +17,12 @@ describe("middleware", () => {
 
   it("redirects unauthenticated /rooms requests to /login", async () => {
     const { default: middleware } = await import("@/middleware");
-    const response = (await middleware(
-      {
-        auth: null,
-        nextUrl: new URL("http://localhost/rooms"),
-      } as never,
-      {} as never
-    )) as Response;
+    const request = Object.assign(new NextRequest("http://localhost/rooms"), {
+      auth: null,
+    });
+    const context = { params: Promise.resolve({}) };
+
+    const response = (await middleware(request, context)) as Response;
 
     expect(response.headers.get("location")).toBe("http://localhost/login");
     expect(response.status).toBe(307);
