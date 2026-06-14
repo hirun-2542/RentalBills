@@ -74,7 +74,10 @@ export function RoomManager({ initialRooms }: { initialRooms: RoomRow[] }) {
   const [rooms, setRooms] = useState(initialRooms);
   const [addOpen, setAddOpen] = useState(false);
   const [editingRoom, setEditingRoom] = useState<RoomRow | null>(null);
-  const [error, setError] = useState("");
+  const [pageError, setPageError] = useState("");
+  const [roomError, setRoomError] = useState("");
+  const [tenantError, setTenantError] = useState("");
+  const [deletingRoomId, setDeletingRoomId] = useState<string | null>(null);
 
   const roomForm = useForm<RoomFormValues>({
     defaultValues: { number: "", description: "", rent: "" },
@@ -91,7 +94,7 @@ export function RoomManager({ initialRooms }: { initialRooms: RoomRow[] }) {
 
   function openTenantDialog(room: RoomRow) {
     const tenant = getDisplayTenant(room);
-    setError("");
+    setTenantError("");
     setEditingRoom(room);
     tenantForm.reset({
       name: tenant?.name ?? "",
@@ -102,7 +105,7 @@ export function RoomManager({ initialRooms }: { initialRooms: RoomRow[] }) {
   }
 
   async function createRoom(values: RoomFormValues) {
-    setError("");
+    setRoomError("");
     const response = await fetch("/api/rooms", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -114,7 +117,7 @@ export function RoomManager({ initialRooms }: { initialRooms: RoomRow[] }) {
     });
 
     if (!response.ok) {
-      setError(await readApiError(response));
+      setRoomError(await readApiError(response));
       return;
     }
 
@@ -129,7 +132,7 @@ export function RoomManager({ initialRooms }: { initialRooms: RoomRow[] }) {
       return;
     }
 
-    setError("");
+    setTenantError("");
     const body = {
       name: values.name,
       phone: values.phone,
@@ -148,7 +151,7 @@ export function RoomManager({ initialRooms }: { initialRooms: RoomRow[] }) {
     );
 
     if (!response.ok) {
-      setError(await readApiError(response));
+      setTenantError(await readApiError(response));
       return;
     }
 
@@ -170,26 +173,41 @@ export function RoomManager({ initialRooms }: { initialRooms: RoomRow[] }) {
   }
 
   async function deleteRoom(room: RoomRow) {
+    if (deletingRoomId) {
+      return;
+    }
+
     if (!window.confirm(`ลบห้อง ${room.number}?`)) {
       return;
     }
 
-    setError("");
+    setPageError("");
+    setDeletingRoomId(room.id);
     const response = await fetch(`/api/rooms/${room.id}`, { method: "DELETE" });
 
     if (!response.ok) {
-      setError(await readApiError(response));
+      setPageError(await readApiError(response));
+      setDeletingRoomId(null);
       return;
     }
 
     setRooms((current) => current.filter((item) => item.id !== room.id));
+    setDeletingRoomId(null);
   }
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">Rooms</h1>
-        <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <Dialog
+          open={addOpen}
+          onOpenChange={(open) => {
+            setAddOpen(open);
+            if (open) {
+              setRoomError("");
+            }
+          }}
+        >
           <DialogTrigger asChild>
             <Button>เพิ่มห้อง</Button>
           </DialogTrigger>
@@ -198,6 +216,9 @@ export function RoomManager({ initialRooms }: { initialRooms: RoomRow[] }) {
               <DialogTitle>เพิ่มห้อง</DialogTitle>
             </DialogHeader>
             <Form {...roomForm}>
+              {roomError ? (
+                <p className="text-sm text-destructive">{roomError}</p>
+              ) : null}
               <form
                 className="space-y-4"
                 onSubmit={roomForm.handleSubmit(createRoom)}
@@ -252,7 +273,9 @@ export function RoomManager({ initialRooms }: { initialRooms: RoomRow[] }) {
         </Dialog>
       </div>
 
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {pageError ? (
+        <p className="text-sm text-destructive">{pageError}</p>
+      ) : null}
 
       <Table>
         <TableHeader>
@@ -290,6 +313,7 @@ export function RoomManager({ initialRooms }: { initialRooms: RoomRow[] }) {
                       Edit
                     </Button>
                     <Button
+                      disabled={deletingRoomId === room.id}
                       size="sm"
                       variant="destructive"
                       onClick={() => deleteRoom(room)}
@@ -309,6 +333,7 @@ export function RoomManager({ initialRooms }: { initialRooms: RoomRow[] }) {
         onOpenChange={(open) => {
           if (!open) {
             setEditingRoom(null);
+            setTenantError("");
           }
         }}
       >
@@ -317,6 +342,9 @@ export function RoomManager({ initialRooms }: { initialRooms: RoomRow[] }) {
             <DialogTitle>แก้ไขผู้เช่า</DialogTitle>
           </DialogHeader>
           <Form {...tenantForm}>
+            {tenantError ? (
+              <p className="text-sm text-destructive">{tenantError}</p>
+            ) : null}
             <form
               className="space-y-4"
               onSubmit={tenantForm.handleSubmit(saveTenant)}

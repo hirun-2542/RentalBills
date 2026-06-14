@@ -12,6 +12,13 @@ async function requireSession() {
   return !!session?.user;
 }
 
+function isPrismaErrorCode(error: unknown, code: string) {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === code
+  );
+}
+
 function parseRoomUpdateBody(body: unknown) {
   if (!body || typeof body !== "object") {
     return null;
@@ -66,17 +73,11 @@ export async function PUT(request: Request, { params }: RouteContext) {
     const room = await db.room.update({ where: { id }, data });
     return NextResponse.json(room);
   } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
+    if (isPrismaErrorCode(error, "P2002")) {
       return NextResponse.json({ error: "Room number already exists" }, { status: 409 });
     }
 
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2025"
-    ) {
+    if (isPrismaErrorCode(error, "P2025")) {
       return NextResponse.json({ error: "Room not found" }, { status: 404 });
     }
 
@@ -106,11 +107,15 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
     ]);
     return new Response(null, { status: 204 });
   } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2025"
-    ) {
+    if (isPrismaErrorCode(error, "P2025")) {
       return NextResponse.json({ error: "Room not found" }, { status: 404 });
+    }
+
+    if (isPrismaErrorCode(error, "P2003")) {
+      return NextResponse.json(
+        { error: "ไม่สามารถลบห้องที่มีประวัติบิล" },
+        { status: 409 }
+      );
     }
 
     throw error;
