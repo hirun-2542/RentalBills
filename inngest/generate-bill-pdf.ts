@@ -95,7 +95,7 @@ export const generateBillPdf = inngest.createFunction(
         })
       );
 
-      return { error: message };
+      throw error instanceof Error ? error : new Error(message);
     }
   }
 );

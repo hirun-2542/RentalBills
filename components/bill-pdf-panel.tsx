@@ -14,6 +14,7 @@ export type BillPdfState = {
 };
 
 type BillResponse = BillPdfState;
+const POLLING_TIMEOUT_MS = 5 * 60 * 1000;
 
 async function readApiError(response: Response) {
   const body = await response.json().catch(() => null);
@@ -40,6 +41,7 @@ export function BillPdfPanel({ initialBill }: { initialBill: BillPdfState }) {
 
       if (!response.ok) {
         setError(await readApiError(response));
+        window.clearInterval(intervalId);
         return;
       }
 
@@ -51,8 +53,15 @@ export function BillPdfPanel({ initialBill }: { initialBill: BillPdfState }) {
         pdfError: nextBill.pdfError,
       });
     }, 2000);
+    const timeoutId = window.setTimeout(() => {
+      setError("ใช้เวลาสร้าง PDF นานเกินไป กรุณาลองใหม่อีกครั้ง");
+      window.clearInterval(intervalId);
+    }, POLLING_TIMEOUT_MS);
 
-    return () => window.clearInterval(intervalId);
+    return () => {
+      window.clearInterval(intervalId);
+      window.clearTimeout(timeoutId);
+    };
   }, [bill.id, generating]);
 
   async function generatePdf() {

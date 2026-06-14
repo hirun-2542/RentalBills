@@ -10,9 +10,15 @@ function getQorstackConfig() {
     throw new Error("QORSTACK_API_URL is not configured");
   }
 
+  const apiKey = process.env.QORSTACK_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("QORSTACK_API_KEY is not configured");
+  }
+
   return {
     apiUrl,
-    apiKey: process.env.QORSTACK_API_KEY,
+    apiKey,
   };
 }
 
@@ -27,11 +33,8 @@ export async function renderBillPdf(
   const { apiUrl, apiKey } = getQorstackConfig();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    Authorization: `Bearer ${apiKey}`,
   };
-
-  if (apiKey) {
-    headers.Authorization = `Bearer ${apiKey}`;
-  }
 
   const response = await fetch(`${apiUrl}/api/v1/render`, {
     method: "POST",

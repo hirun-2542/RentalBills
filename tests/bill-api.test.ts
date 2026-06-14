@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
       findMany: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     room: {
       findMany: vi.fn(),
@@ -382,11 +383,7 @@ describe("Ticket 006 bill API routes", () => {
   });
 
   it("POST /api/bills/:id/generate queues PDF generation", async () => {
-    mocks.db.bill.findUnique.mockResolvedValue({ pdfStatus: PdfStatus.NONE });
-    mocks.db.bill.update.mockResolvedValue({
-      id: "bill-1",
-      pdfStatus: PdfStatus.PENDING,
-    });
+    mocks.db.bill.updateMany.mockResolvedValue({ count: 1 });
     mocks.inngest.send.mockResolvedValue(undefined);
 
     const response = await generatePdf(new Request("http://localhost"), {
@@ -395,8 +392,11 @@ describe("Ticket 006 bill API routes", () => {
 
     await expect(response.json()).resolves.toEqual({ status: "queued" });
     expect(response.status).toBe(202);
-    expect(mocks.db.bill.update).toHaveBeenCalledWith({
-      where: { id: "bill-1" },
+    expect(mocks.db.bill.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "bill-1",
+        pdfStatus: { notIn: [PdfStatus.PENDING, PdfStatus.PROCESSING] },
+      },
       data: {
         pdfStatus: PdfStatus.PENDING,
         pdfError: null,
@@ -410,6 +410,7 @@ describe("Ticket 006 bill API routes", () => {
   });
 
   it("POST /api/bills/:id/generate returns 409 while PDF is generating", async () => {
+    mocks.db.bill.updateMany.mockResolvedValue({ count: 0 });
     mocks.db.bill.findUnique.mockResolvedValue({
       pdfStatus: PdfStatus.PROCESSING,
     });
@@ -422,7 +423,17 @@ describe("Ticket 006 bill API routes", () => {
       error: "กำลังสร้าง PDF อยู่",
     });
     expect(response.status).toBe(409);
-    expect(mocks.db.bill.update).not.toHaveBeenCalled();
+    expect(mocks.db.bill.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "bill-1",
+        pdfStatus: { notIn: [PdfStatus.PENDING, PdfStatus.PROCESSING] },
+      },
+      data: {
+        pdfStatus: PdfStatus.PENDING,
+        pdfError: null,
+        pdfUrl: null,
+      },
+    });
     expect(mocks.inngest.send).not.toHaveBeenCalled();
   });
 

@@ -19,33 +19,33 @@ export async function POST(_request: Request, { params }: RouteContext) {
   }
 
   const { id } = await params;
-  const bill = await db.bill.findUnique({
-    where: { id },
-    select: { pdfStatus: true },
-  });
-
-  if (!bill) {
-    return NextResponse.json({ error: "Bill not found" }, { status: 404 });
-  }
-
-  if (
-    bill.pdfStatus === PdfStatus.PENDING ||
-    bill.pdfStatus === PdfStatus.PROCESSING
-  ) {
-    return NextResponse.json(
-      { error: "กำลังสร้าง PDF อยู่" },
-      { status: 409 }
-    );
-  }
-
-  await db.bill.update({
-    where: { id },
+  const updated = await db.bill.updateMany({
+    where: {
+      id,
+      pdfStatus: { notIn: [PdfStatus.PENDING, PdfStatus.PROCESSING] },
+    },
     data: {
       pdfStatus: PdfStatus.PENDING,
       pdfError: null,
       pdfUrl: null,
     },
   });
+
+  if (updated.count === 0) {
+    const bill = await db.bill.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!bill) {
+      return NextResponse.json({ error: "Bill not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(
+      { error: "กำลังสร้าง PDF อยู่" },
+      { status: 409 }
+    );
+  }
 
   await inngest.send({
     name: "bill/pdf.generate",
