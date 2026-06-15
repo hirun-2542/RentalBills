@@ -24,6 +24,11 @@ type ApiCreateResult = {
   skipped?: Array<{ roomId: string; reason: string }>;
 };
 
+type HistoryBill = {
+  status: "DRAFT" | "SENT" | "PAID";
+  total: number;
+};
+
 export function getDashboardStats(bills: DashboardBill[]) {
   return {
     sent: bills.filter((bill) => bill.status === BillStatus.SENT).length,
@@ -37,6 +42,23 @@ export function getDashboardStats(bills: DashboardBill[]) {
 
 export function buildBillsUrl(month: string, year: string) {
   return `/api/bills?month=${month}&year=${year}`;
+}
+
+export function getPreviousMonthSelection(date: Date) {
+  const previousMonthDate = new Date(date.getFullYear(), date.getMonth() - 1, 1);
+
+  return {
+    month: String(previousMonthDate.getMonth() + 1),
+    year: String(previousMonthDate.getFullYear()),
+  };
+}
+
+export function getHistorySummary(bills: HistoryBill[]) {
+  return {
+    totalAmount: bills.reduce((sum, bill) => sum + bill.total, 0),
+    paidCount: bills.filter((bill) => bill.status === "PAID").length,
+    unpaidCount: bills.filter((bill) => bill.status !== "PAID").length,
+  };
 }
 
 export function canSendLine(bill: BillLineState) {
