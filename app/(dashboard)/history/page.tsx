@@ -30,8 +30,6 @@ const bahtFormatter = new Intl.NumberFormat("th-TH", {
   currency: "THB",
 });
 
-const defaultSelection = getPreviousMonthSelection(new Date());
-
 async function readApiError(response: Response) {
   const body = (await response.json().catch(() => null)) as
     | { error?: string }
@@ -40,8 +38,12 @@ async function readApiError(response: Response) {
 }
 
 export default function HistoryPage() {
-  const [month, setMonth] = useState(defaultSelection.month);
-  const [year, setYear] = useState(defaultSelection.year);
+  const [month, setMonth] = useState(
+    () => getPreviousMonthSelection(new Date()).month
+  );
+  const [year, setYear] = useState(
+    () => getPreviousMonthSelection(new Date()).year
+  );
   const [bills, setBills] = useState<BillRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -62,7 +64,17 @@ export default function HistoryPage() {
 
       const response = await fetch(buildBillsUrl(month, year), {
         signal: controller.signal,
-      }).catch(() => null);
+      }).catch((err: unknown) => {
+        if (err instanceof Error && err.name === "AbortError") {
+          return "aborted" as const;
+        }
+
+        return null;
+      });
+
+      if (response === "aborted") {
+        return;
+      }
 
       if (!response) {
         setError("ไม่สามารถโหลดข้อมูลบิลได้");

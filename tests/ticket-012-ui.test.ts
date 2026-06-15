@@ -5,6 +5,12 @@ import {
   getPreviousMonthSelection,
 } from "@/lib/dashboard-bills-ui";
 
+function shouldShowHistoryEmptyState(
+  bills: Parameters<typeof getHistorySummary>[0]
+) {
+  return getHistorySummary(bills).totalAmount === 0 && bills.length === 0;
+}
+
 describe("Ticket 012 bill history UI", () => {
   it("เลือก month/year ที่มีบิล -> summary แสดงถูกต้อง", () => {
     const bills = [
@@ -27,7 +33,7 @@ describe("Ticket 012 bill history UI", () => {
       paidCount: 0,
       unpaidCount: 0,
     });
-    expect([].length === 0).toBe(true);
+    expect(shouldShowHistoryEmptyState([])).toBe(true);
   });
 
   it("defaults to previous month", () => {
