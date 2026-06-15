@@ -2,10 +2,14 @@
 
 import type { Room, Tenant } from "@prisma/client";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useCallback, useMemo, useState } from "react";
 import { MeterForm } from "@/components/MeterForm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  buildBillCreatePayload,
+  shouldRedirectAfterCreate,
+} from "@/lib/dashboard-bills-ui";
 
 type MeterRoom = Pick<Room, "id" | "number"> & {
   tenant: Pick<Tenant, "id" | "name">;
@@ -23,10 +27,7 @@ type ApiError = {
 };
 
 const now = new Date();
-
-function readNumber(formData: FormData, name: string) {
-  return Number(formData.get(name));
-}
+const MAX_YEAR = 9999;
 
 function formatApiErrors(data: ApiError) {
   const messages = [
@@ -46,30 +47,37 @@ export function BillCreateForm({ rooms }: BillCreateFormProps) {
   const [month, setMonth] = useState(String(now.getMonth() + 1));
   const [year, setYear] = useState(String(now.getFullYear()));
   const [errors, setErrors] = useState<string[]>([]);
+  const [meterErrors, setMeterErrors] = useState<Record<number, boolean>>({});
   const [submitting, setSubmitting] = useState(false);
+  const hasMeterErrors = useMemo(
+    () => Object.values(meterErrors).some(Boolean),
+    [meterErrors]
+  );
+  const updateMeterValidity = useCallback(
+    (index: number, hasError: boolean) => {
+      setMeterErrors((current) => ({ ...current, [index]: hasError }));
+    },
+    []
+  );
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (hasMeterErrors) {
+      setErrors(["กรุณาแก้ไขค่ามิเตอร์ที่ไม่ถูกต้องก่อนสร้างบิล"]);
+      return;
+    }
+
     setSubmitting(true);
     setErrors([]);
 
     const formData = new FormData(event.currentTarget);
-    const bills = rooms.map((room, index) => ({
-      roomId: String(formData.get(`bills.${index}.roomId`) ?? room.id),
-      waterPrevReading: readNumber(formData, `bills.${index}.waterPrevReading`),
-      waterCurrReading: readNumber(formData, `bills.${index}.waterCurrReading`),
-      elecPrevReading: readNumber(formData, `bills.${index}.elecPrevReading`),
-      elecCurrReading: readNumber(formData, `bills.${index}.elecCurrReading`),
-    }));
+    const payload = buildBillCreatePayload({ formData, month, rooms, year });
 
     const response = await fetch("/api/bills", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        month: Number(month),
-        year: Number(year),
-        bills,
-      }),
+      body: JSON.stringify(payload),
     }).catch(() => null);
 
     if (!response) {
@@ -86,9 +94,13 @@ export function BillCreateForm({ rooms }: BillCreateFormProps) {
       return;
     }
 
-    if (data.skipped?.length) {
-      setErrors(formatApiErrors(data));
-      setSubmitting(false);
+    if (shouldRedirectAfterCreate(data)) {
+      window.sessionStorage.setItem(
+        "billCreateWarning",
+        formatApiErrors(data).join("\n")
+      );
+      router.push("/bills");
+      router.refresh();
       return;
     }
 
@@ -117,6 +129,7 @@ export function BillCreateForm({ rooms }: BillCreateFormProps) {
           <Input
             id="bill-year"
             min={2000}
+            max={MAX_YEAR}
             onChange={(event) => setYear(event.target.value)}
             type="number"
             value={year}
@@ -131,19 +144,27 @@ export function BillCreateForm({ rooms }: BillCreateFormProps) {
           role="alert"
           className="space-y-1 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
         >
-          {errors.map((error) => (
-            <p key={error}>{error}</p>
+          {errors.map((error, index) => (
+            <p key={index}>{error}</p>
           ))}
         </div>
       ) : null}
 
       <div className="space-y-3">
         {rooms.map((room, index) => (
-          <MeterForm key={room.id} index={index} room={room} />
+          <MeterForm
+            key={room.id}
+            index={index}
+            onValidityChange={updateMeterValidity}
+            room={room}
+          />
         ))}
       </div>
 
-      <Button disabled={submitting || rooms.length === 0} type="submit">
+      <Button
+        disabled={submitting || rooms.length === 0 || hasMeterErrors}
+        type="submit"
+      >
         {submitting ? "กำลังสร้างบิล" : "สร้างบิล"}
       </Button>
     </form>

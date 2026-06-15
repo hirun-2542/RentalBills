@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { BillStatus } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getDashboardStats } from "@/lib/dashboard-bills-ui";
 import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -25,12 +25,7 @@ export default async function DashboardPage() {
     select: { status: true },
   });
 
-  const sent = bills.filter((bill) => bill.status === BillStatus.SENT).length;
-  const paid = bills.filter((bill) => bill.status === BillStatus.PAID).length;
-  const pending = bills.filter(
-    (bill) =>
-      bill.status === BillStatus.DRAFT || bill.status === BillStatus.SENT
-  ).length;
+  const { sent, pending, paid } = getDashboardStats(bills);
 
   const stats = [
     { label: "ส่งแล้ว", value: sent },
@@ -76,13 +71,13 @@ export default async function DashboardPage() {
 
       <div className="flex flex-wrap gap-2">
         <Button asChild variant="outline">
-          <Link href="/bills">Bills</Link>
+          <Link href="/bills">บิลทั้งหมด</Link>
         </Button>
         <Button asChild variant="outline">
-          <Link href="/rooms">Rooms</Link>
+          <Link href="/rooms">จัดการห้อง</Link>
         </Button>
         <Button asChild variant="outline">
-          <Link href="/settings">Settings</Link>
+          <Link href="/settings">ตั้งค่า</Link>
         </Button>
       </div>
     </div>

@@ -5,9 +5,11 @@ import { useEffect, useMemo, useState } from "react";
 import { PaymentBadge } from "@/components/PaymentBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { buildBillsUrl, canSendLine } from "@/lib/dashboard-bills-ui";
 
 type BillStatus = "DRAFT" | "SENT" | "PAID";
 type PdfStatus = "NONE" | "PENDING" | "PROCESSING" | "DONE" | "FAILED";
+const MAX_YEAR = 9999;
 
 type BillRow = {
   id: string;
@@ -54,6 +56,8 @@ export default function BillsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busyBillId, setBusyBillId] = useState<string | null>(null);
+  const [busySendBillId, setBusySendBillId] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
 
   const title = useMemo(
     () => `บิลเดือน ${getMonthLabel(Number(month))} ${year}`,
@@ -66,8 +70,9 @@ export default function BillsPage() {
     async function loadBills() {
       setLoading(true);
       setError("");
+      setNotice("");
 
-      const response = await fetch(`/api/bills?month=${month}&year=${year}`, {
+      const response = await fetch(buildBillsUrl(month, year), {
         signal: controller.signal,
       }).catch(() => null);
 
@@ -92,6 +97,15 @@ export default function BillsPage() {
 
     return () => controller.abort();
   }, [month, year]);
+
+  useEffect(() => {
+    const warning = window.sessionStorage.getItem("billCreateWarning");
+
+    if (warning) {
+      setNotice(warning);
+      window.sessionStorage.removeItem("billCreateWarning");
+    }
+  }, []);
 
   async function markPaid(id: string) {
     setBusyBillId(id);
@@ -120,6 +134,35 @@ export default function BillsPage() {
     setBusyBillId(null);
   }
 
+  async function sendLine(id: string) {
+    setBusySendBillId(id);
+    setError("");
+    setNotice("");
+
+    const response = await fetch(`/api/bills/${id}/send`, {
+      method: "POST",
+    }).catch(() => null);
+
+    if (!response) {
+      setError("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้");
+      setBusySendBillId(null);
+      return;
+    }
+
+    if (!response.ok) {
+      setError(await readApiError(response));
+      setBusySendBillId(null);
+      return;
+    }
+
+    const updated = (await response.json()) as BillRow;
+    setBills((currentBills) =>
+      currentBills.map((bill) => (bill.id === id ? updated : bill))
+    );
+    setNotice("ส่ง LINE สำเร็จ");
+    setBusySendBillId(null);
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3">
@@ -145,6 +188,7 @@ export default function BillsPage() {
             id="year"
             type="number"
             min={2000}
+            max={MAX_YEAR}
             value={year}
             onChange={(event) => setYear(event.target.value)}
             className="w-32"
@@ -161,6 +205,11 @@ export default function BillsPage() {
 
       {error ? (
         <p className="text-sm text-destructive">{error}</p>
+      ) : null}
+      {notice ? (
+        <p className="text-sm text-muted-foreground" role="status">
+          {notice}
+        </p>
       ) : null}
 
       <div className="overflow-hidden rounded-lg border">
@@ -216,6 +265,16 @@ export default function BillsPage() {
                       >
                         {busyBillId === bill.id ? "กำลังบันทึก" : "Mark Paid"}
                       </Button>
+                      {canSendLine(bill) ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => sendLine(bill.id)}
+                          disabled={busySendBillId === bill.id}
+                        >
+                          {busySendBillId === bill.id ? "กำลังส่ง" : "ส่ง LINE"}
+                        </Button>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
