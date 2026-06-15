@@ -22,6 +22,10 @@ type BillRow = {
   tenant: { name: string };
   room: { number: string };
 };
+type Notice = {
+  type: "info" | "warning";
+  message: string;
+};
 
 const current = new Date();
 
@@ -49,6 +53,21 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
+function readBillCreateWarning(): Notice | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const warning = window.sessionStorage.getItem("billCreateWarning");
+
+  if (!warning) {
+    return null;
+  }
+
+  window.sessionStorage.removeItem("billCreateWarning");
+  return { type: "warning", message: warning };
+}
+
 export default function BillsPage() {
   const [month, setMonth] = useState(String(current.getMonth() + 1));
   const [year, setYear] = useState(String(current.getFullYear()));
@@ -57,7 +76,7 @@ export default function BillsPage() {
   const [error, setError] = useState("");
   const [busyBillId, setBusyBillId] = useState<string | null>(null);
   const [busySendBillId, setBusySendBillId] = useState<string | null>(null);
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState<Notice | null>(readBillCreateWarning);
 
   const title = useMemo(
     () => `บิลเดือน ${getMonthLabel(Number(month))} ${year}`,
@@ -70,7 +89,6 @@ export default function BillsPage() {
     async function loadBills() {
       setLoading(true);
       setError("");
-      setNotice("");
 
       const response = await fetch(buildBillsUrl(month, year), {
         signal: controller.signal,
@@ -97,15 +115,6 @@ export default function BillsPage() {
 
     return () => controller.abort();
   }, [month, year]);
-
-  useEffect(() => {
-    const warning = window.sessionStorage.getItem("billCreateWarning");
-
-    if (warning) {
-      setNotice(warning);
-      window.sessionStorage.removeItem("billCreateWarning");
-    }
-  }, []);
 
   async function markPaid(id: string) {
     setBusyBillId(id);
@@ -137,7 +146,7 @@ export default function BillsPage() {
   async function sendLine(id: string) {
     setBusySendBillId(id);
     setError("");
-    setNotice("");
+    setNotice(null);
 
     const response = await fetch(`/api/bills/${id}/send`, {
       method: "POST",
@@ -159,7 +168,7 @@ export default function BillsPage() {
     setBills((currentBills) =>
       currentBills.map((bill) => (bill.id === id ? updated : bill))
     );
-    setNotice("ส่ง LINE สำเร็จ");
+    setNotice({ type: "info", message: "ส่ง LINE สำเร็จ" });
     setBusySendBillId(null);
   }
 
@@ -207,9 +216,16 @@ export default function BillsPage() {
         <p className="text-sm text-destructive">{error}</p>
       ) : null}
       {notice ? (
-        <p className="text-sm text-muted-foreground" role="status">
-          {notice}
-        </p>
+        <div
+          className={
+            notice.type === "warning"
+              ? "rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+              : "text-sm text-muted-foreground"
+          }
+          role="status"
+        >
+          {notice.message}
+        </div>
       ) : null}
 
       <div className="overflow-hidden rounded-lg border">
