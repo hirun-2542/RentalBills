@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { PaymentBadge } from "@/components/payment-badge";
+import { PaymentBadge } from "@/components/PaymentBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
