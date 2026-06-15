@@ -172,6 +172,16 @@ export default function BillsPage() {
     setBusySendBillId(null);
   }
 
+  function updateMonth(value: string) {
+    setNotice(null);
+    setMonth(value);
+  }
+
+  function updateYear(value: string) {
+    setNotice(null);
+    setYear(value);
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3">
@@ -185,7 +195,7 @@ export default function BillsPage() {
             min={1}
             max={12}
             value={month}
-            onChange={(event) => setMonth(event.target.value)}
+            onChange={(event) => updateMonth(event.target.value)}
             className="w-28"
           />
         </div>
@@ -199,7 +209,7 @@ export default function BillsPage() {
             min={2000}
             max={MAX_YEAR}
             value={year}
-            onChange={(event) => setYear(event.target.value)}
+            onChange={(event) => updateYear(event.target.value)}
             className="w-32"
           />
         </div>
@@ -219,7 +229,7 @@ export default function BillsPage() {
         <div
           className={
             notice.type === "warning"
-              ? "rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+              ? "whitespace-pre-wrap rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
               : "text-sm text-muted-foreground"
           }
           role="status"
