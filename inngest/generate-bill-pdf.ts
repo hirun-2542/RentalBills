@@ -1,7 +1,11 @@
+import path from "node:path";
 import { PdfStatus } from "@prisma/client";
 import { inngest } from "@/lib/inngest";
 import { db } from "@/lib/db";
+import { saveBillPdf } from "@/lib/pdf-storage";
+import { renderBillPdfFromLayout } from "@/lib/pdf-renderer";
 import { renderBillPdf } from "@/lib/qorstack";
+import type { TemplateLayout } from "@/lib/template-editor";
 
 function toTemplateValue(value: { toString(): string } | number | string) {
   return value.toString();
@@ -55,7 +59,16 @@ export async function generateBillPdfForBill(billId: string) {
   };
 
   try {
-    const pdfUrl = await renderBillPdf(variables);
+    const pdfUrl = settings.templateLayout
+      ? await saveBillPdf(
+          billId,
+          await renderBillPdfFromLayout(
+            settings.templateLayout as TemplateLayout,
+            variables,
+            path.join(process.cwd(), "public", settings.templatePreviewPath ?? "")
+          )
+        )
+      : await renderBillPdf(variables);
 
     await db.bill.update({
       where: { id: billId },
