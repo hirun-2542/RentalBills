@@ -12,6 +12,18 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#39;");
 }
 
+function toNumberStyle(value: number) {
+  return Number.isFinite(value) ? value : 0;
+}
+
+function toFontWeight(value: string) {
+  return value === "bold" ? "bold" : "normal";
+}
+
+function toColor(value: string) {
+  return /^#[0-9a-fA-F]{6}$/.test(value) ? value : "#111111";
+}
+
 function getImageMimeType(filePath: string) {
   const extension = path.extname(filePath).toLowerCase();
 
@@ -35,7 +47,15 @@ async function buildHtml(
           ? variables[item.variable] ?? ""
           : item.text ?? "";
 
-      return `<span class="item" style="left:${item.x}px;top:${item.y}px;width:${item.width}px;height:${item.height}px;font-size:${item.fontSize}px;font-weight:${item.fontWeight};color:${item.color};">${escapeHtml(value)}</span>`;
+      return `<span class="item" style="left:${toNumberStyle(
+        item.x
+      )}px;top:${toNumberStyle(item.y)}px;width:${toNumberStyle(
+        item.width
+      )}px;height:${toNumberStyle(item.height)}px;font-size:${toNumberStyle(
+        item.fontSize
+      )}px;font-weight:${toFontWeight(item.fontWeight)};color:${toColor(
+        item.color
+      )};">${escapeHtml(value)}</span>`;
     })
     .join("");
 

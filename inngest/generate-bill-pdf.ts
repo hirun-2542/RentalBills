@@ -59,13 +59,15 @@ export async function generateBillPdfForBill(billId: string) {
   };
 
   try {
-    const pdfUrl = settings.templateLayout
+    const backgroundPreviewPath = settings.templatePreviewPath;
+    const shouldUseLayout = settings.templateLayout && backgroundPreviewPath;
+    const pdfUrl = shouldUseLayout
       ? await saveBillPdf(
           billId,
           await renderBillPdfFromLayout(
             settings.templateLayout as TemplateLayout,
             variables,
-            path.join(process.cwd(), "public", settings.templatePreviewPath ?? "")
+            path.join(process.cwd(), "public", backgroundPreviewPath)
           )
         )
       : await renderBillPdf(variables);
@@ -97,7 +99,11 @@ export async function generateBillPdfForBill(billId: string) {
 }
 
 export const generateBillPdf = inngest.createFunction(
-  { id: "generate-bill-pdf", triggers: [{ event: "bill/pdf.generate" }] },
+  {
+    id: "generate-bill-pdf",
+    concurrency: 2,
+    triggers: [{ event: "bill/pdf.generate" }],
+  },
   async ({ event, step }) => {
     const { billId } = event.data as { billId: string };
 

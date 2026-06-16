@@ -139,6 +139,35 @@ describe("Ticket 019 PDF flow", () => {
     });
   });
 
+  it("falls back to Qorstack when layout has no background preview path", async () => {
+    mocks.db.settings.findUnique.mockResolvedValue({
+      bankAccountName: "กล้วยหอม มีสุข",
+      bankAccountNumber: "123-4-56789-0",
+      promptpayNumber: "0812345678",
+      templateLayout: { pageWidth: 595, pageHeight: 842, items: [] },
+      templatePreviewPath: null,
+    });
+
+    await expect(generateBillPdfForBill("bill-1")).resolves.toEqual({
+      pdfUrl: "https://qorstack.test/bill.pdf",
+    });
+
+    expect(mocks.renderBillPdf).toHaveBeenCalledOnce();
+    expect(mocks.renderBillPdfFromLayout).not.toHaveBeenCalled();
+    expect(mocks.saveBillPdf).not.toHaveBeenCalled();
+  });
+
+  it("preview endpoint returns 401 when unauthenticated", async () => {
+    mocks.auth.mockResolvedValue(null);
+
+    const response = await preview();
+
+    await expect(response.json()).resolves.toEqual({ error: "Unauthorized" });
+    expect(response.status).toBe(401);
+    expect(mocks.renderBillPdf).not.toHaveBeenCalled();
+    expect(mocks.renderBillPdfFromLayout).not.toHaveBeenCalled();
+  });
+
   it("preview endpoint writes and returns the local preview URL", async () => {
     mocks.db.settings.findUnique.mockResolvedValue({
       templateLayout: { pageWidth: 595, pageHeight: 842, items: [] },
