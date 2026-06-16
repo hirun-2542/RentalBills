@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { LogoutButton } from "@/components/logout-button";
 import { Separator } from "@/components/ui/separator";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const navItems = [
   { label: "Dashboard", href: "/" },
@@ -38,10 +39,11 @@ export default function DashboardLayout({
         </div>
       </aside>
       <div className="md:pl-64">
-        <header className="sticky top-0 z-10 flex h-16 items-center border-b bg-background px-6">
+        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-background px-6">
           <div className="text-sm font-medium text-muted-foreground">
             RentalBills
           </div>
+          <ThemeToggle />
         </header>
         <main className="p-6">{children}</main>
       </div>

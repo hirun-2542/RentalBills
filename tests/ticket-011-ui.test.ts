@@ -7,6 +7,7 @@ import {
   getDashboardStats,
   getMeterUsage,
   hasMeterError,
+  isPdfGenerating,
   shouldRedirectAfterCreate,
 } from "@/lib/dashboard-bills-ui";
 
@@ -75,6 +76,11 @@ describe("Ticket 011 dashboard and bills UI", () => {
         skipped: [{ roomId: "room-102", reason: "No active tenant" }],
       })
     ).toBe(true);
+    expect(
+      shouldRedirectAfterCreate({
+        duplicates: [{ roomId: "room-101", roomNumber: "101" }],
+      })
+    ).toBe(true);
   });
 
   it("Bills list filter month/year", () => {
@@ -86,5 +92,13 @@ describe("Ticket 011 dashboard and bills UI", () => {
     expect(canSendLine({ status: "SENT", pdfStatus: "DONE" })).toBe(true);
     expect(canSendLine({ status: "PAID", pdfStatus: "DONE" })).toBe(false);
     expect(canSendLine({ status: "SENT", pdfStatus: "PENDING" })).toBe(false);
+  });
+
+  it("disables PDF generation while a PDF job is already running", () => {
+    expect(isPdfGenerating({ pdfStatus: "PENDING" })).toBe(true);
+    expect(isPdfGenerating({ pdfStatus: "PROCESSING" })).toBe(true);
+    expect(isPdfGenerating({ pdfStatus: "NONE" })).toBe(false);
+    expect(isPdfGenerating({ pdfStatus: "FAILED" })).toBe(false);
+    expect(isPdfGenerating({ pdfStatus: "DONE" })).toBe(false);
   });
 });

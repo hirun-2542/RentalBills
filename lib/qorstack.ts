@@ -1,4 +1,5 @@
 type RenderResponse = {
+  downloadUrl?: string | null;
   url?: string;
   fileUrl?: string;
 };
@@ -33,15 +34,17 @@ export async function renderBillPdf(
   const { apiUrl, apiKey } = getQorstackConfig();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${apiKey}`,
+    "X-API-KEY": apiKey,
   };
 
-  const response = await fetch(`${apiUrl}/api/v1/render`, {
+  const response = await fetch(`${apiUrl}/render/word/template`, {
     method: "POST",
     headers,
     body: JSON.stringify({
-      templateName: "bill",
-      variables,
+      templateKey: "bill",
+      fileName: "bill",
+      fileType: "pdf",
+      replace: variables,
     }),
   });
 
@@ -50,7 +53,7 @@ export async function renderBillPdf(
   }
 
   const data = (await response.json()) as RenderResponse;
-  const fileUrl = data.url ?? data.fileUrl;
+  const fileUrl = data.downloadUrl ?? data.url ?? data.fileUrl;
 
   if (!fileUrl) {
     throw new Error("qorstack response did not include a PDF URL");

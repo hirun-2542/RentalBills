@@ -5,7 +5,11 @@ import { useEffect, useMemo, useState } from "react";
 import { PaymentBadge } from "@/components/PaymentBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { buildBillsUrl, canSendLine } from "@/lib/dashboard-bills-ui";
+import {
+  buildBillsUrl,
+  canSendLine,
+  isPdfGenerating,
+} from "@/lib/dashboard-bills-ui";
 
 type BillStatus = "DRAFT" | "SENT" | "PAID";
 type PdfStatus = "NONE" | "PENDING" | "PROCESSING" | "DONE" | "FAILED";
@@ -75,12 +79,17 @@ export default function BillsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busyBillId, setBusyBillId] = useState<string | null>(null);
+  const [busyPdfBillId, setBusyPdfBillId] = useState<string | null>(null);
   const [busySendBillId, setBusySendBillId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(readBillCreateWarning);
 
   const title = useMemo(
     () => `บิลเดือน ${getMonthLabel(Number(month))} ${year}`,
     [month, year]
+  );
+  const hasGeneratingBills = useMemo(
+    () => bills.some((bill) => isPdfGenerating(bill)),
+    [bills]
   );
 
   useEffect(() => {
@@ -116,6 +125,25 @@ export default function BillsPage() {
     return () => controller.abort();
   }, [month, year]);
 
+  useEffect(() => {
+    if (!hasGeneratingBills) {
+      return;
+    }
+
+    const intervalId = window.setInterval(async () => {
+      const response = await fetch(buildBillsUrl(month, year)).catch(() => null);
+
+      if (!response?.ok) {
+        return;
+      }
+
+      const data = (await response.json()) as BillRow[];
+      setBills(data);
+    }, 2000);
+
+    return () => window.clearInterval(intervalId);
+  }, [hasGeneratingBills, month, year]);
+
   async function markPaid(id: string) {
     setBusyBillId(id);
     setError("");
@@ -141,6 +169,36 @@ export default function BillsPage() {
       currentBills.map((bill) => (bill.id === id ? updated : bill))
     );
     setBusyBillId(null);
+  }
+
+  async function generatePdf(id: string) {
+    setBusyPdfBillId(id);
+    setError("");
+    setNotice(null);
+
+    const response = await fetch(`/api/bills/${id}/generate`, {
+      method: "POST",
+    }).catch(() => null);
+
+    if (!response) {
+      setError("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้");
+      setBusyPdfBillId(null);
+      return;
+    }
+
+    if (!response.ok) {
+      setError(await readApiError(response));
+      setBusyPdfBillId(null);
+      return;
+    }
+
+    setBills((currentBills) =>
+      currentBills.map((bill) =>
+        bill.id === id ? { ...bill, pdfStatus: "PENDING" } : bill
+      )
+    );
+    setNotice({ type: "info", message: "เริ่มสร้าง PDF แล้ว" });
+    setBusyPdfBillId(null);
   }
 
   async function sendLine(id: string) {
@@ -215,11 +273,16 @@ export default function BillsPage() {
         </div>
       </div>
 
-      <div className="space-y-2">
-        <h1 className="text-2xl font-semibold">{title}</h1>
-        <p className="text-sm text-muted-foreground">
-          แสดงรายการบิลตามเดือนและปีที่เลือก
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-semibold">{title}</h1>
+          <p className="text-sm text-muted-foreground">
+            แสดงรายการบิลตามเดือนและปีที่เลือก
+          </p>
+        </div>
+        <Button asChild>
+          <Link href="/bills/new">สร้างบิลเดือนนี้</Link>
+        </Button>
       </div>
 
       {error ? (
@@ -259,8 +322,15 @@ export default function BillsPage() {
               </tr>
             ) : bills.length === 0 ? (
               <tr>
-                <td className="px-3 py-6 text-muted-foreground" colSpan={6}>
-                  ยังไม่มีบิลสำหรับช่วงเวลานี้
+                <td className="px-3 py-6" colSpan={6}>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <span className="text-muted-foreground">
+                      ยังไม่มีบิลสำหรับช่วงเวลานี้
+                    </span>
+                    <Button asChild variant="outline" size="sm">
+                      <Link href="/bills/new">สร้างบิล</Link>
+                    </Button>
+                  </div>
                 </td>
               </tr>
             ) : (
@@ -290,6 +360,20 @@ export default function BillsPage() {
                         disabled={busyBillId === bill.id || bill.status === "PAID"}
                       >
                         {busyBillId === bill.id ? "กำลังบันทึก" : "Mark Paid"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => generatePdf(bill.id)}
+                        disabled={
+                          busyPdfBillId === bill.id || isPdfGenerating(bill)
+                        }
+                      >
+                        {busyPdfBillId === bill.id || isPdfGenerating(bill)
+                          ? "กำลังสร้าง PDF"
+                          : bill.pdfStatus === "FAILED"
+                            ? "ลองสร้าง PDF"
+                            : "สร้าง PDF"}
                       </Button>
                       {canSendLine(bill) ? (
                         <Button

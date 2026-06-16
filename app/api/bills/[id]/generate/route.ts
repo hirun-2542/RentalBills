@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { inngest } from "@/lib/inngest";
+import { generateBillPdfForBill } from "@/inngest/generate-bill-pdf";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -11,6 +12,19 @@ type RouteContext = {
 async function requireSession() {
   const session = await auth();
   return !!session?.user;
+}
+
+function isMissingInngestEventKey(error: unknown) {
+  return (
+    error instanceof Error &&
+    error.message.includes("couldn't find an event key")
+  );
+}
+
+function runLocalPdfGeneration(billId: string) {
+  void generateBillPdfForBill(billId).catch((error) => {
+    console.error("Local PDF generation failed", error);
+  });
 }
 
 export async function POST(_request: Request, { params }: RouteContext) {
@@ -47,10 +61,30 @@ export async function POST(_request: Request, { params }: RouteContext) {
     );
   }
 
-  await inngest.send({
-    name: "bill/pdf.generate",
-    data: { billId: id },
-  });
+  try {
+    await inngest.send({
+      name: "bill/pdf.generate",
+      data: { billId: id },
+    });
+  } catch (error) {
+    if (!isMissingInngestEventKey(error)) {
+      await db.bill.update({
+        where: { id },
+        data: {
+          pdfStatus: PdfStatus.FAILED,
+          pdfError:
+            error instanceof Error ? error.message : "Failed to queue PDF job",
+        },
+      });
+
+      return NextResponse.json(
+        { error: "ไม่สามารถเริ่มสร้าง PDF ได้" },
+        { status: 502 }
+      );
+    }
+
+    runLocalPdfGeneration(id);
+  }
 
   return NextResponse.json({ status: "queued" }, { status: 202 });
 }

@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => ({
   inngest: {
     send: vi.fn(),
   },
+  generateBillPdfForBill: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -47,6 +48,10 @@ vi.mock("@/lib/db", () => ({
 
 vi.mock("@/lib/inngest", () => ({
   inngest: mocks.inngest,
+}));
+
+vi.mock("@/inngest/generate-bill-pdf", () => ({
+  generateBillPdfForBill: mocks.generateBillPdfForBill,
 }));
 
 vi.mock("@/lib/promptpay", () => ({
@@ -172,9 +177,10 @@ describe("Ticket 006 bill API routes", () => {
     expect(mocks.db.$transaction).not.toHaveBeenCalled();
   });
 
-  it("returns 409 with duplicate rooms for existing month and year bills", async () => {
+  it("skips duplicate rooms and creates bills for new rooms in the same month", async () => {
     mocks.db.bill.findMany.mockResolvedValue([
       {
+        tenantId: "tenant-101",
         roomId: "room-101",
         room: { number: "101" },
       },
@@ -183,11 +189,14 @@ describe("Ticket 006 bill API routes", () => {
     const response = await POST(jsonRequest(billPayload));
 
     await expect(response.json()).resolves.toMatchObject({
-      error: "Duplicate bills",
+      bills: [expect.objectContaining({ roomId: "room-102" })],
       duplicates: [{ roomId: "room-101", roomNumber: "101" }],
+      skipped: [],
     });
-    expect(response.status).toBe(409);
-    expect(mocks.db.$transaction).not.toHaveBeenCalled();
+    expect(response.status).toBe(201);
+    expect(mocks.db.$transaction).toHaveBeenCalledWith([
+      expect.objectContaining({ roomId: "room-102" }),
+    ]);
   });
 
   it("uses Settings and room rent snapshots for bill totals", async () => {
@@ -453,6 +462,24 @@ describe("Ticket 006 bill API routes", () => {
       },
     });
     expect(mocks.inngest.send).not.toHaveBeenCalled();
+  });
+
+  it("POST /api/bills/:id/generate falls back to local generation when Inngest is not configured", async () => {
+    mocks.db.bill.updateMany.mockResolvedValue({ count: 1 });
+    mocks.inngest.send.mockRejectedValue(
+      new Error("We couldn't find an event key to use to send events to Inngest")
+    );
+    mocks.generateBillPdfForBill.mockResolvedValue({
+      pdfUrl: "https://rental.test/bill.pdf",
+    });
+
+    const response = await generatePdf(new Request("http://localhost"), {
+      params: Promise.resolve({ id: "bill-1" }),
+    });
+
+    await expect(response.json()).resolves.toEqual({ status: "queued" });
+    expect(response.status).toBe(202);
+    expect(mocks.generateBillPdfForBill).toHaveBeenCalledWith("bill-1");
   });
 
   it("GET /api/bills/:id/qr returns a PromptPay QR PNG", async () => {

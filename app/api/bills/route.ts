@@ -235,19 +235,13 @@ export async function POST(request: Request) {
     },
     include: { room: true },
   });
-
-  if (existingBills.length > 0) {
-    return NextResponse.json(
-      {
-        error: "Duplicate bills",
-        duplicates: existingBills.map((bill) => ({
-          roomId: bill.roomId,
-          roomNumber: bill.room.number,
-        })),
-      },
-      { status: 409 }
-    );
-  }
+  const duplicateTenantIds = new Set(
+    existingBills.map((bill) => bill.tenantId)
+  );
+  const duplicates = existingBills.map((bill) => ({
+    roomId: bill.roomId,
+    roomNumber: bill.room.number,
+  }));
 
   const waterRatePerUnit = settings.waterRatePerUnit.toNumber();
   const waterCollectionFee = settings.waterCollectionFee.toNumber();
@@ -258,7 +252,7 @@ export async function POST(request: Request) {
       const room = roomsById.get(billInput.roomId);
       const tenant = room?.tenants[0];
 
-      if (!room || !tenant) {
+      if (!room || !tenant || duplicateTenantIds.has(tenant.id)) {
         return null;
       }
 
@@ -298,7 +292,7 @@ export async function POST(request: Request) {
   try {
     const createdBills = await db.$transaction(createOperations);
     return NextResponse.json(
-      { bills: serialize(createdBills), skipped },
+      { bills: serialize(createdBills), skipped, duplicates },
       { status: 201 }
     );
   } catch (error) {

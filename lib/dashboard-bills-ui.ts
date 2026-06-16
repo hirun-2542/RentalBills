@@ -9,6 +9,10 @@ type BillLineState = {
   pdfStatus: "NONE" | "PENDING" | "PROCESSING" | "DONE" | "FAILED";
 };
 
+type BillPdfState = {
+  pdfStatus: "NONE" | "PENDING" | "PROCESSING" | "DONE" | "FAILED";
+};
+
 type MeterReadings = {
   waterPrevReading: string;
   waterCurrReading: string;
@@ -22,6 +26,7 @@ type BillCreateRoom = {
 
 type ApiCreateResult = {
   skipped?: Array<{ roomId: string; reason: string }>;
+  duplicates?: Array<{ roomId: string; roomNumber: string }>;
 };
 
 type HistoryBill = {
@@ -66,6 +71,10 @@ export function canSendLine(bill: BillLineState) {
     (bill.status === "DRAFT" || bill.status === "SENT") &&
     bill.pdfStatus === "DONE"
   );
+}
+
+export function isPdfGenerating(bill: BillPdfState) {
+  return bill.pdfStatus === "PENDING" || bill.pdfStatus === "PROCESSING";
 }
 
 export function getMeterUsage(readings: MeterReadings) {
@@ -113,5 +122,5 @@ export function buildBillCreatePayload({
 }
 
 export function shouldRedirectAfterCreate(data: ApiCreateResult) {
-  return Boolean(data.skipped?.length);
+  return Boolean(data.skipped?.length || data.duplicates?.length);
 }
