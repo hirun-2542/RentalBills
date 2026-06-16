@@ -41,4 +41,14 @@ describe("PDF storage", () => {
   it("returns a bill PDF URL", () => {
     expect(getBillPdfUrl("bill-123")).toBe("/uploads/bills/bill-123.pdf");
   });
+
+  it("rejects unsafe bill IDs", async () => {
+    expect(() => getBillPdfUrl("../bill-123")).toThrow("Invalid billId");
+    await expect(saveBillPdf("../bill-123", Buffer.from("pdf"))).rejects.toThrow(
+      "Invalid billId"
+    );
+    await expect(deleteBillPdf("../bill-123")).rejects.toThrow(
+      "Invalid billId"
+    );
+  });
 });
