@@ -110,11 +110,27 @@ export function BillPdfPanel({ initialBill }: { initialBill: BillPdfState }) {
       ) : null}
 
       {bill.pdfStatus === "DONE" && bill.pdfUrl ? (
-        <Button asChild variant="outline">
-          <a href={bill.pdfUrl} download>
-            ดาวน์โหลด PDF
+        <div className="space-y-4">
+          <Button asChild variant="outline">
+            <a href={bill.pdfUrl} download>
+              ดาวน์โหลด PDF
+            </a>
+          </Button>
+          <iframe
+            src={bill.pdfUrl}
+            className="w-full h-[600px] rounded border"
+            title="PDF Preview"
+            sandbox="allow-same-origin"
+          />
+          <a
+            href={bill.pdfUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm underline"
+          >
+            เปิด PDF ในแท็บใหม่
           </a>
-        </Button>
+        </div>
       ) : null}
 
       {bill.pdfStatus === "FAILED" && bill.pdfError ? (
