@@ -10,6 +10,7 @@ const navItems = [
   { label: "Bills", href: "/bills" },
   { label: "History", href: "/history" },
   { label: "Settings", href: "/settings" },
+  { label: "Template PDF", href: "/settings/template" },
 ];
 
 export default function DashboardLayout({
