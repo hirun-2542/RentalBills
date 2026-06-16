@@ -1,4 +1,4 @@
-import { access, readFile } from "node:fs/promises";
+import { promises as fs } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -7,30 +7,39 @@ import {
   saveBillPdf,
 } from "@/lib/pdf-storage";
 
-const billId = "ticket-019-test";
-const pdfPath = path.join(
+const testBillId = "ticket-015-test";
+const testPdfPath = path.join(
   process.cwd(),
   "public",
   "uploads",
   "bills",
-  `${billId}.pdf`
+  `${testBillId}.pdf`
 );
 
 describe("PDF storage", () => {
   afterEach(async () => {
-    await deleteBillPdf(billId);
+    await deleteBillPdf(testBillId);
   });
 
-  it("saves, urls, and deletes bill PDFs", async () => {
-    await expect(saveBillPdf(billId, Buffer.from("pdf"))).resolves.toBe(
-      "/uploads/bills/ticket-019-test.pdf"
-    );
-    await expect(readFile(pdfPath, "utf8")).resolves.toBe("pdf");
+  it("saves a bill PDF and returns its public URL", async () => {
+    const url = await saveBillPdf(testBillId, Buffer.from("pdf"));
 
-    expect(getBillPdfUrl(billId)).toBe("/uploads/bills/ticket-019-test.pdf");
-    await expect(deleteBillPdf(billId)).resolves.toBeUndefined();
-    await expect(access(pdfPath)).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(deleteBillPdf(billId)).resolves.toBeUndefined();
+    await expect(fs.readFile(testPdfPath, "utf8")).resolves.toBe("pdf");
+    expect(url).toBe("/uploads/bills/ticket-015-test.pdf");
+  });
+
+  it("deletes a bill PDF and ignores missing files", async () => {
+    await saveBillPdf(testBillId, Buffer.from("pdf"));
+
+    await expect(deleteBillPdf(testBillId)).resolves.toBeUndefined();
+    await expect(fs.access(testPdfPath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(deleteBillPdf(testBillId)).resolves.toBeUndefined();
+  });
+
+  it("returns a bill PDF URL", () => {
+    expect(getBillPdfUrl("bill-123")).toBe("/uploads/bills/bill-123.pdf");
   });
 
   it("rejects unsafe bill IDs", async () => {
@@ -38,6 +47,8 @@ describe("PDF storage", () => {
     await expect(saveBillPdf("../bill-123", Buffer.from("pdf"))).rejects.toThrow(
       "Invalid billId"
     );
-    await expect(deleteBillPdf("../bill-123")).rejects.toThrow("Invalid billId");
+    await expect(deleteBillPdf("../bill-123")).rejects.toThrow(
+      "Invalid billId"
+    );
   });
 });

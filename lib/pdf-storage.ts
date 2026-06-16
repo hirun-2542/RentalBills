@@ -1,10 +1,10 @@
-import { mkdir, unlink, writeFile } from "node:fs/promises";
+import { promises as fs } from "node:fs";
 import path from "node:path";
 
-const uploadDir = path.join(process.cwd(), "public", "uploads", "bills");
+const billsUploadDir = path.join(process.cwd(), "public", "uploads", "bills");
 const billIdPattern = /^[a-zA-Z0-9_-]+$/;
 
-function assertValidBillId(billId: string) {
+function assertValidBillId(billId: string): void {
   if (!billIdPattern.test(billId)) {
     throw new Error("Invalid billId");
   }
@@ -22,8 +22,8 @@ export async function saveBillPdf(
 ): Promise<string> {
   assertValidBillId(billId);
 
-  await mkdir(uploadDir, { recursive: true });
-  await writeFile(path.join(uploadDir, `${billId}.pdf`), buffer);
+  await fs.mkdir(billsUploadDir, { recursive: true });
+  await fs.writeFile(path.join(billsUploadDir, `${billId}.pdf`), buffer);
 
   return getBillPdfUrl(billId);
 }
@@ -31,9 +31,11 @@ export async function saveBillPdf(
 export async function deleteBillPdf(billId: string): Promise<void> {
   assertValidBillId(billId);
 
-  await unlink(path.join(uploadDir, `${billId}.pdf`)).catch((error) => {
+  try {
+    await fs.unlink(path.join(billsUploadDir, `${billId}.pdf`));
+  } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       throw error;
     }
-  });
+  }
 }
