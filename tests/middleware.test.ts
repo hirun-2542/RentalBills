@@ -15,16 +15,22 @@ describe("middleware", () => {
     vi.resetModules();
   });
 
-  it("redirects unauthenticated /rooms requests to /login", async () => {
-    const { default: middleware } = await import("@/middleware");
-    const request = Object.assign(new NextRequest("http://localhost/rooms"), {
-      auth: null,
-    });
-    const context = { params: Promise.resolve({}) };
+  it.each(["/rooms", "/settings"])(
+    "redirects unauthenticated %s requests to /login",
+    async (path) => {
+      const { default: middleware } = await import("@/middleware");
+      const request = Object.assign(
+        new NextRequest(`http://localhost${path}`),
+        {
+          auth: null,
+        }
+      );
+      const context = { params: Promise.resolve({}) };
 
-    const response = (await middleware(request, context)) as Response;
+      const response = (await middleware(request, context)) as Response;
 
-    expect(response.headers.get("location")).toBe("http://localhost/login");
-    expect(response.status).toBe(307);
-  });
+      expect(response.headers.get("location")).toBe("http://localhost/login");
+      expect(response.status).toBe(307);
+    }
+  );
 });
