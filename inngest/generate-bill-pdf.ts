@@ -1,7 +1,11 @@
+import path from "node:path";
 import { PdfStatus } from "@prisma/client";
 import { inngest } from "@/lib/inngest";
 import { db } from "@/lib/db";
+import { saveBillPdf } from "@/lib/pdf-storage";
+import { renderBillPdfFromLayout } from "@/lib/pdf-renderer";
 import { renderBillPdf } from "@/lib/qorstack";
+import type { TemplateLayout } from "@/lib/template-editor";
 
 function toTemplateValue(value: { toString(): string } | number | string) {
   return value.toString();
@@ -55,7 +59,18 @@ export async function generateBillPdfForBill(billId: string) {
   };
 
   try {
-    const pdfUrl = await renderBillPdf(variables);
+    const backgroundPreviewPath = settings.templatePreviewPath;
+    const shouldUseLayout = settings.templateLayout && backgroundPreviewPath;
+    const pdfUrl = shouldUseLayout
+      ? await saveBillPdf(
+          billId,
+          await renderBillPdfFromLayout(
+            settings.templateLayout as TemplateLayout,
+            variables,
+            path.join(process.cwd(), "public", backgroundPreviewPath)
+          )
+        )
+      : await renderBillPdf(variables);
 
     await db.bill.update({
       where: { id: billId },
@@ -84,7 +99,11 @@ export async function generateBillPdfForBill(billId: string) {
 }
 
 export const generateBillPdf = inngest.createFunction(
-  { id: "generate-bill-pdf", triggers: [{ event: "bill/pdf.generate" }] },
+  {
+    id: "generate-bill-pdf",
+    concurrency: 2,
+    triggers: [{ event: "bill/pdf.generate" }],
+  },
   async ({ event, step }) => {
     const { billId } = event.data as { billId: string };
 
