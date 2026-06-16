@@ -57,8 +57,9 @@ function parseSettingsUpdate(body: unknown) {
     "elecRatePerUnit",
   ] as const) {
     if (key in input) {
+      const rawValue = input[key];
       const value =
-        typeof input[key] === "number" ? input[key] : Number(input[key]);
+        rawValue === null || rawValue === undefined ? NaN : Number(rawValue);
 
       if (!Number.isFinite(value) || value < 0) {
         errors[key] = "Must be a non-negative number";

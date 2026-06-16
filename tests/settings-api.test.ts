@@ -77,6 +77,25 @@ describe("Ticket 005 settings API", () => {
     expect(mocks.db.settings.upsert).not.toHaveBeenCalled();
   });
 
+  it("PUT /api/settings returns 400 for invalid numbers", async () => {
+    const response = await PUT(
+      jsonRequest({
+        waterRatePerUnit: null,
+        waterCollectionFee: "abc",
+        elecRatePerUnit: 4.75,
+      })
+    );
+
+    await expect(response.json()).resolves.toMatchObject({
+      errors: {
+        waterRatePerUnit: "Must be a non-negative number",
+        waterCollectionFee: "Must be a non-negative number",
+      },
+    });
+    expect(response.status).toBe(400);
+    expect(mocks.db.settings.upsert).not.toHaveBeenCalled();
+  });
+
   it("PUT /api/settings updates valid values", async () => {
     mocks.db.settings.upsert.mockResolvedValue({
       id: "singleton",
