@@ -3,8 +3,14 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
-import type { TemplateLayoutItem } from "@/components/template-canvas-editor";
 import { TemplateVariablePanel } from "@/components/template-variable-panel";
+import {
+  buildTemplateSavePayload,
+  createStaticTextItem,
+  getLayoutItems,
+  type TemplateLayoutItem,
+  type TemplateResponse,
+} from "@/lib/template-editor";
 
 const TemplateCanvasEditor = dynamic(
   () =>
@@ -13,37 +19,6 @@ const TemplateCanvasEditor = dynamic(
     ),
   { ssr: false }
 );
-
-type TemplateResponse = {
-  backgroundPreviewUrl?: string | null;
-  previewUrl?: string | null;
-  templatePreviewPath?: string | null;
-  layout?: TemplateLayoutItem[];
-  templateLayout?: TemplateLayoutItem[];
-};
-
-function getPreviewUrl(data: TemplateResponse) {
-  return data.backgroundPreviewUrl ?? data.previewUrl ?? data.templatePreviewPath ?? null;
-}
-
-function getLayout(data: TemplateResponse) {
-  return data.layout ?? data.templateLayout ?? [];
-}
-
-function createStaticTextItem(): TemplateLayoutItem {
-  return {
-    id: `item-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    type: "text",
-    text: "ข้อความ",
-    x: 40,
-    y: 40,
-    width: 160,
-    height: 28,
-    fontSize: 14,
-    fontWeight: "normal",
-    color: "#111111",
-  };
-}
 
 export default function TemplateSettingsPage() {
   const [items, setItems] = useState<TemplateLayoutItem[]>([]);
@@ -59,8 +34,8 @@ export default function TemplateSettingsPage() {
       .then((response) => (response.ok ? response.json() : null))
       .then((data: TemplateResponse | null) => {
         if (!mounted || !data) return;
-        setBackgroundPreviewUrl(getPreviewUrl(data));
-        setItems(getLayout(data));
+        setBackgroundPreviewUrl(data.backgroundPreviewUrl);
+        setItems(getLayoutItems(data));
       })
       .catch(() => setStatus("โหลด template ไม่สำเร็จ"));
 
@@ -80,14 +55,16 @@ export default function TemplateSettingsPage() {
       method: "POST",
       body: formData,
     });
-    const data = (await response.json().catch(() => ({}))) as TemplateResponse;
+    const data = (await response.json().catch(() => ({}))) as {
+      previewUrl?: string | null;
+    };
 
     if (!response.ok) {
       setStatus("อัปโหลดไม่สำเร็จ");
       return;
     }
 
-    setBackgroundPreviewUrl(getPreviewUrl(data));
+    setBackgroundPreviewUrl(data.previewUrl ?? null);
     setStatus("อัปโหลดแล้ว");
   };
 
@@ -114,10 +91,9 @@ export default function TemplateSettingsPage() {
       method: "POST",
     });
     const data = (await response.json().catch(() => ({}))) as {
-      url?: string;
       previewUrl?: string;
     };
-    const url = data.url ?? data.previewUrl;
+    const url = data.previewUrl;
 
     if (!response.ok || !url) {
       setStatus("สร้าง preview ไม่สำเร็จ");
@@ -134,7 +110,7 @@ export default function TemplateSettingsPage() {
     const response = await fetch("/api/settings/template/layout", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ layout: items }),
+      body: JSON.stringify(buildTemplateSavePayload(items)),
     });
 
     setStatus(response.ok ? "บันทึกแล้ว" : "บันทึกไม่สำเร็จ");

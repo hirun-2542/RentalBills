@@ -7,47 +7,23 @@ import "konva/lib/shapes/Image";
 import "konva/lib/shapes/Text";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { TEMPLATE_VARIABLES, type TemplateVariable } from "./template-variable-panel";
+import {
+  TEMPLATE_PAGE_HEIGHT,
+  TEMPLATE_PAGE_WIDTH,
+  createVariableTextItem,
+  getVariableLabel,
+  isTemplateVariable,
+  updateTemplateItem,
+  type TemplateLayoutItem,
+} from "@/lib/template-editor";
 
-const A4_WIDTH = 595;
-const A4_HEIGHT = 842;
-const DEFAULT_ITEM = {
-  x: 40,
-  y: 40,
-  width: 160,
-  height: 28,
-  fontSize: 14,
-  fontWeight: "normal" as const,
-  color: "#111111",
-};
-
-export type TemplateLayoutItem = {
-  id: string;
-  type: "variable" | "text";
-  variable?: TemplateVariable;
-  text: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  fontSize: number;
-  fontWeight: "normal" | "bold";
-  color: string;
-};
+export type { TemplateLayoutItem } from "@/lib/template-editor";
 
 type Props = {
   backgroundPreviewUrl: string | null;
   items: TemplateLayoutItem[];
   onItemsChange: (items: TemplateLayoutItem[]) => void;
 };
-
-function makeId() {
-  return `item-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function getVariableLabel(variable: string) {
-  return TEMPLATE_VARIABLES.find(([value]) => value === variable)?.[1] ?? variable;
-}
 
 function useImage(url: string | null) {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
@@ -66,29 +42,17 @@ function useImage(url: string | null) {
   return image;
 }
 
-export function createTemplateTextItem(
-  patch: Partial<TemplateLayoutItem> = {}
-): TemplateLayoutItem {
-  return {
-    id: makeId(),
-    type: "text",
-    text: "ข้อความ",
-    ...DEFAULT_ITEM,
-    ...patch,
-  };
-}
-
 export function TemplateCanvasEditor({
   backgroundPreviewUrl,
   items,
   onItemsChange,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
-  const [displayWidth, setDisplayWidth] = useState(A4_WIDTH);
+  const [displayWidth, setDisplayWidth] = useState(TEMPLATE_PAGE_WIDTH);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const image = useImage(backgroundPreviewUrl);
-  const scale = displayWidth / A4_WIDTH;
-  const displayHeight = A4_HEIGHT * scale;
+  const scale = displayWidth / TEMPLATE_PAGE_WIDTH;
+  const displayHeight = TEMPLATE_PAGE_HEIGHT * scale;
   const selected = useMemo(
     () => items.find((item) => item.id === selectedId) ?? null,
     [items, selectedId]
@@ -96,8 +60,8 @@ export function TemplateCanvasEditor({
 
   useEffect(() => {
     const resize = () => {
-      const width = wrapRef.current?.clientWidth ?? A4_WIDTH;
-      setDisplayWidth(Math.min(A4_WIDTH, width));
+      const width = wrapRef.current?.clientWidth ?? TEMPLATE_PAGE_WIDTH;
+      setDisplayWidth(Math.min(TEMPLATE_PAGE_WIDTH, width));
     };
 
     resize();
@@ -106,25 +70,21 @@ export function TemplateCanvasEditor({
   }, []);
 
   const updateItem = (id: string, patch: Partial<TemplateLayoutItem>) => {
-    onItemsChange(items.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+    onItemsChange(updateTemplateItem(items, id, patch));
   };
 
   const addDroppedItem = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
 
-    const variable = event.dataTransfer.getData(
-      "application/x-template-variable"
-    ) as TemplateVariable;
+    const variable = event.dataTransfer.getData("application/x-template-variable");
 
-    if (!variable || !wrapRef.current) return;
+    if (!isTemplateVariable(variable) || !wrapRef.current) return;
 
     const rect = wrapRef.current.getBoundingClientRect();
     const x = (event.clientX - rect.left) / scale;
     const y = (event.clientY - rect.top) / scale;
-    const item = createTemplateTextItem({
-      type: "variable",
+    const item = createVariableTextItem(variable, {
       variable,
-      text: `{${variable}}`,
       x: Math.round(x),
       y: Math.round(y),
       width: 160,
@@ -155,12 +115,16 @@ export function TemplateCanvasEditor({
         >
           <Layer>
             {image ? (
-              <KonvaImage image={image} width={A4_WIDTH} height={A4_HEIGHT} />
+              <KonvaImage
+                image={image}
+                width={TEMPLATE_PAGE_WIDTH}
+                height={TEMPLATE_PAGE_HEIGHT}
+              />
             ) : (
               <Text
                 text="Upload background"
-                width={A4_WIDTH}
-                height={A4_HEIGHT}
+                width={TEMPLATE_PAGE_WIDTH}
+                height={TEMPLATE_PAGE_HEIGHT}
                 align="center"
                 verticalAlign="middle"
                 fill="#9ca3af"
@@ -172,8 +136,12 @@ export function TemplateCanvasEditor({
             {items.map((item) => (
               <Text
                 key={item.id}
-                {...item}
-                text={item.type === "variable" && item.variable ? `{${item.variable}}` : item.text}
+                x={item.x}
+                y={item.y}
+                width={item.width}
+                height={item.height}
+                fontSize={item.fontSize}
+                text={item.type === "variable" && item.variable ? `{${item.variable}}` : item.text ?? ""}
                 fontStyle={item.fontWeight === "bold" ? "bold" : "normal"}
                 fill={item.color}
                 draggable
@@ -194,7 +162,7 @@ export function TemplateCanvasEditor({
         <h2 className="text-sm font-semibold">Inspector</h2>
         {selected ? (
           <>
-            {selected.type === "text" ? (
+            {selected.type === "static" ? (
               <Field label="Text">
                 <Input
                   value={selected.text}
