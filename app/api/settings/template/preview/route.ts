@@ -30,6 +30,10 @@ const PREVIEW_VARIABLES = {
   promptpayNumber: "0812345678",
 };
 
+const SETTINGS_ID = "singleton";
+const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads", "template");
+const PREVIEW_URL = "/uploads/template/preview-bill.pdf";
+
 async function requireSession() {
   const session = await auth();
   return !!session?.user;
@@ -40,31 +44,38 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const settings = await db.settings.findUnique({ where: { id: "singleton" } });
+  const settings = await db.settings.findUnique({ where: { id: SETTINGS_ID } });
+  let buffer: Buffer;
 
-  if (!settings?.templateLayout) {
-    return NextResponse.json({
-      previewUrl: await renderBillPdf(PREVIEW_VARIABLES),
-    });
-  }
+  if (settings?.templateLayout) {
+    if (!settings.templatePreviewPath) {
+      return NextResponse.json(
+        { error: "Template background preview is required" },
+        { status: 400 }
+      );
+    }
 
-  if (!settings.templatePreviewPath) {
-    return NextResponse.json(
-      { error: "Template background preview is required" },
-      { status: 400 }
+    buffer = await renderBillPdfFromLayout(
+      settings.templateLayout as TemplateLayout,
+      PREVIEW_VARIABLES,
+      path.join(process.cwd(), "public", settings.templatePreviewPath)
     );
+  } else {
+    const pdfUrl = await renderBillPdf(PREVIEW_VARIABLES);
+    const response = await fetch(pdfUrl);
+
+    if (!response.ok) {
+      return NextResponse.json(
+        { error: "Preview PDF download failed" },
+        { status: 502 }
+      );
+    }
+
+    buffer = Buffer.from(await response.arrayBuffer());
   }
 
-  const buffer = await renderBillPdfFromLayout(
-    settings.templateLayout as TemplateLayout,
-    PREVIEW_VARIABLES,
-    path.join(process.cwd(), "public", settings.templatePreviewPath)
-  );
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "template");
-  const previewUrl = "/uploads/template/preview-bill.pdf";
+  await mkdir(UPLOAD_DIR, { recursive: true });
+  await writeFile(path.join(UPLOAD_DIR, "preview-bill.pdf"), buffer);
 
-  await mkdir(uploadDir, { recursive: true });
-  await writeFile(path.join(uploadDir, "preview-bill.pdf"), buffer);
-
-  return NextResponse.json({ previewUrl });
+  return NextResponse.json({ previewUrl: PREVIEW_URL });
 }
