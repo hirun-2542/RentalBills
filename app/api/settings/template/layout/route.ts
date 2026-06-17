@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { ALLOWED_VARIABLES, type TemplateLayout } from "@/types/template";
-import { requireSession, SETTINGS_ID } from "../_shared";
+import { ALLOWED_VARIABLES, type TemplateLayout } from "@/lib/template-editor";
+import { requireSession, SETTINGS_ID } from "@/lib/api";
 
 const MAX_ITEMS = 500;
 const VARIABLE_SET = new Set<string>(ALLOWED_VARIABLES);

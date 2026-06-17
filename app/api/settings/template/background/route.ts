@@ -11,19 +11,13 @@ import os from "node:os";
 import path from "node:path";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { requireSession, SETTINGS_ID } from "@/lib/api";
 import { convertToPreviewPng } from "@/lib/template-converter";
-
-const SETTINGS_ID = "singleton";
 const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads", "template");
 const PREVIEW_URL = "/uploads/template/preview.png";
 const MAX_UPLOAD_SIZE = 10 * 1024 * 1024;
 
-async function requireSession() {
-  const session = await auth();
-  return !!session?.user;
-}
 
 function getFileType(file: File): "docx" | "pdf" | null {
   const extension = path.extname(file.name).toLowerCase();

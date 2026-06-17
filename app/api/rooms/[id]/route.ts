@@ -1,16 +1,12 @@
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { requireSession } from "@/lib/api";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
-async function requireSession() {
-  const session = await auth();
-  return !!session?.user;
-}
 
 function isPrismaErrorCode(error: unknown, code: string) {
   return (

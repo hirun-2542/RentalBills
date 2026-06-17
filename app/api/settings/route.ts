@@ -1,9 +1,7 @@
-import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-
-const SETTINGS_ID = "singleton";
+import { requireSession, SETTINGS_ID } from "@/lib/api";
+import { serialize } from "@/lib/serialize";
 
 type SettingsUpdate = {
   waterRatePerUnit?: number;
@@ -14,32 +12,7 @@ type SettingsUpdate = {
   promptpayNumber?: string;
 };
 
-function serialize(data: unknown): unknown {
-  if (data instanceof Prisma.Decimal) {
-    return data.toNumber();
-  }
 
-  if (data instanceof Date) {
-    return data.toISOString();
-  }
-
-  if (Array.isArray(data)) {
-    return data.map(serialize);
-  }
-
-  if (data && typeof data === "object") {
-    return Object.fromEntries(
-      Object.entries(data).map(([key, value]) => [key, serialize(value)])
-    );
-  }
-
-  return data;
-}
-
-async function requireSession() {
-  const session = await auth();
-  return !!session?.user;
-}
 
 function parseSettingsUpdate(body: unknown) {
   const errors: Record<string, string> = {};

@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { renderBillPdfFromLayout } from "@/lib/pdf-renderer";
 import { renderBillPdf } from "@/lib/qorstack";
 import type { TemplateLayout } from "@/lib/template-editor";
-import { requireSession, SETTINGS_ID } from "../_shared";
+import { requireSession, SETTINGS_ID } from "@/lib/api";
 
 const PREVIEW_VARIABLES = {
   tenantName: "ภิญโญ สมชาย",

@@ -1,7 +1,7 @@
 import { PdfStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { requireSession } from "@/lib/api";
 import { inngest } from "@/lib/inngest";
 import { generateBillPdfForBill } from "@/inngest/generate-bill-pdf";
 
@@ -9,10 +9,6 @@ type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
-async function requireSession() {
-  const session = await auth();
-  return !!session?.user;
-}
 
 function isMissingInngestEventKey(error: unknown) {
   return (

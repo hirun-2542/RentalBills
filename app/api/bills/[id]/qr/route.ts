@@ -1,8 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { generatePromptPayQR } from "@/lib/promptpay";
+import { requireSession, SETTINGS_ID } from "@/lib/api";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -13,9 +13,7 @@ function toNumber(value: Prisma.Decimal | number) {
 }
 
 export async function GET(_request: Request, { params }: RouteContext) {
-  const session = await auth();
-
-  if (!session?.user) {
+  if (!(await requireSession())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -30,7 +28,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
   }
 
   const settings = (await db.settings.findUnique({
-    where: { id: "singleton" },
+    where: { id: SETTINGS_ID },
     select: { promptpayNumber: true },
   })) ?? { promptpayNumber: "" };
 

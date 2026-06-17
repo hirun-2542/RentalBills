@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requireSession, SETTINGS_ID } from "./_shared";
+import { requireSession, SETTINGS_ID } from "@/lib/api";
 
 export async function GET() {
   if (!(await requireSession())) {

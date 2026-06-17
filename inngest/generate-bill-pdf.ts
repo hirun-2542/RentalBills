@@ -7,9 +7,6 @@ import { renderBillPdfFromLayout } from "@/lib/pdf-renderer";
 import { renderBillPdf } from "@/lib/qorstack";
 import type { TemplateLayout } from "@/lib/template-editor";
 
-function toTemplateValue(value: { toString(): string } | number | string) {
-  return value.toString();
-}
 
 export async function generateBillPdfForBill(billId: string) {
   const bill = await db.bill.findUnique({
@@ -38,21 +35,21 @@ export async function generateBillPdfForBill(billId: string) {
   const variables: Record<string, string> = {
     tenantName: bill.tenant.name,
     roomNumber: bill.room.number,
-    month: toTemplateValue(bill.month),
-    year: toTemplateValue(bill.year),
-    waterPrevReading: toTemplateValue(bill.waterPrevReading),
-    waterCurrReading: toTemplateValue(bill.waterCurrReading),
-    waterUsage: toTemplateValue(bill.waterUsage),
-    waterRatePerUnit: toTemplateValue(bill.waterRatePerUnit),
-    waterCollectionFee: toTemplateValue(bill.waterCollectionFee),
-    waterTotal: toTemplateValue(bill.waterTotal),
-    elecPrevReading: toTemplateValue(bill.elecPrevReading),
-    elecCurrReading: toTemplateValue(bill.elecCurrReading),
-    elecUsage: toTemplateValue(bill.elecUsage),
-    elecRatePerUnit: toTemplateValue(bill.elecRatePerUnit),
-    elecTotal: toTemplateValue(bill.elecTotal),
-    rent: toTemplateValue(bill.rent),
-    total: toTemplateValue(bill.total),
+    month: String(bill.month),
+    year: String(bill.year),
+    waterPrevReading: String(bill.waterPrevReading),
+    waterCurrReading: String(bill.waterCurrReading),
+    waterUsage: String(bill.waterUsage),
+    waterRatePerUnit: String(bill.waterRatePerUnit),
+    waterCollectionFee: String(bill.waterCollectionFee),
+    waterTotal: String(bill.waterTotal),
+    elecPrevReading: String(bill.elecPrevReading),
+    elecCurrReading: String(bill.elecCurrReading),
+    elecUsage: String(bill.elecUsage),
+    elecRatePerUnit: String(bill.elecRatePerUnit),
+    elecTotal: String(bill.elecTotal),
+    rent: String(bill.rent),
+    total: String(bill.total),
     bankAccountName: settings.bankAccountName,
     bankAccountNumber: settings.bankAccountNumber,
     promptpayNumber: settings.promptpayNumber,

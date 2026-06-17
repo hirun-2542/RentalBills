@@ -1,40 +1,16 @@
 import { BillStatus, PdfStatus, Prisma } from "@prisma/client";
 import { type messagingApi } from "@line/bot-sdk";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { sendBillMessages } from "@/lib/line";
+import { requireSession } from "@/lib/api";
+import { serialize } from "@/lib/serialize";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
-async function requireSession() {
-  const session = await auth();
-  return !!session?.user;
-}
 
-function serialize(data: unknown): unknown {
-  if (data instanceof Prisma.Decimal) {
-    return data.toNumber();
-  }
-
-  if (data instanceof Date) {
-    return data.toISOString();
-  }
-
-  if (Array.isArray(data)) {
-    return data.map(serialize);
-  }
-
-  if (data && typeof data === "object") {
-    return Object.fromEntries(
-      Object.entries(data).map(([key, value]) => [key, serialize(value)])
-    );
-  }
-
-  return data;
-}
 
 function toNumber(value: Prisma.Decimal | number) {
   return value instanceof Prisma.Decimal ? value.toNumber() : value;

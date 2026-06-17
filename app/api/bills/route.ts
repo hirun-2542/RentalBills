@@ -1,7 +1,8 @@
 import { BillStatus, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { requireSession, SETTINGS_ID } from "@/lib/api";
+import { serialize } from "@/lib/serialize";
 
 type BillInput = {
   roomId: string;
@@ -11,32 +12,7 @@ type BillInput = {
   elecCurrReading: number;
 };
 
-async function requireSession() {
-  const session = await auth();
-  return !!session?.user;
-}
 
-function serialize(data: unknown): unknown {
-  if (data instanceof Prisma.Decimal) {
-    return data.toNumber();
-  }
-
-  if (data instanceof Date) {
-    return data.toISOString();
-  }
-
-  if (Array.isArray(data)) {
-    return data.map(serialize);
-  }
-
-  if (data && typeof data === "object") {
-    return Object.fromEntries(
-      Object.entries(data).map(([key, value]) => [key, serialize(value)])
-    );
-  }
-
-  return data;
-}
 
 function isPrismaErrorCode(error: unknown, code: string) {
   return (
@@ -191,7 +167,7 @@ export async function POST(request: Request) {
   }
 
   const settings = await db.settings.findUnique({
-    where: { id: "singleton" },
+    where: { id: SETTINGS_ID },
   });
 
   if (!settings) {

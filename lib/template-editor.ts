@@ -24,6 +24,8 @@ export const TEMPLATE_VARIABLES = [
   ["promptpayNumber", "PromptPay"],
 ] as const;
 
+export const ALLOWED_VARIABLES = TEMPLATE_VARIABLES.map(([key]) => key);
+
 export type TemplateVariable = (typeof TEMPLATE_VARIABLES)[number][0];
 
 export type TemplateLayoutItem = {
