@@ -1,18 +1,21 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { ALLOWED_VARIABLES, type TemplateLayout } from "@/types/template";
+import { requireSession, SETTINGS_ID } from "../_shared";
 
-const SETTINGS_ID = "singleton";
+const MAX_ITEMS = 500;
 const VARIABLE_SET = new Set<string>(ALLOWED_VARIABLES);
 
-async function requireSession() {
-  const session = await auth();
-  return !!session?.user;
+function isNonNegativeNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
 function isPositiveNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function isColor(value: unknown) {
+  return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value);
 }
 
 function validateLayout(body: unknown): TemplateLayout | string {
@@ -29,6 +32,9 @@ function validateLayout(body: unknown): TemplateLayout | string {
     return "pageHeight must be a positive number";
   }
   if (!Array.isArray(layout.items)) return "items must be an array";
+  if (layout.items.length > MAX_ITEMS) return "items must contain 500 items or fewer";
+
+  const ids = new Set<string>();
 
   for (const [index, rawItem] of layout.items.entries()) {
     if (!rawItem || typeof rawItem !== "object" || Array.isArray(rawItem)) {
@@ -40,11 +46,21 @@ function validateLayout(body: unknown): TemplateLayout | string {
     if (typeof item.id !== "string" || item.id.trim() === "") {
       return `items[${index}].id must be a non-empty string`;
     }
+    if (ids.has(item.id)) {
+      return `items[${index}].id must be unique`;
+    }
+    ids.add(item.id);
     if (item.type !== "variable" && item.type !== "static") {
       return `items[${index}].type must be "variable" or "static"`;
     }
 
-    for (const key of ["x", "y", "width", "height", "fontSize"] as const) {
+    for (const key of ["x", "y"] as const) {
+      if (!isNonNegativeNumber(item[key])) {
+        return `items[${index}].${key} must be a non-negative number`;
+      }
+    }
+
+    for (const key of ["width", "height", "fontSize"] as const) {
       if (!isPositiveNumber(item[key])) {
         return `items[${index}].${key} must be a positive number`;
       }
@@ -53,8 +69,8 @@ function validateLayout(body: unknown): TemplateLayout | string {
     if (item.fontWeight !== "normal" && item.fontWeight !== "bold") {
       return `items[${index}].fontWeight must be "normal" or "bold"`;
     }
-    if (typeof item.color !== "string" || item.color.trim() === "") {
-      return `items[${index}].color must be a non-empty string`;
+    if (!isColor(item.color)) {
+      return `items[${index}].color must be a hex color`;
     }
     if (item.type === "variable") {
       if (typeof item.variable !== "string") {

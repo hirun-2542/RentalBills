@@ -1,13 +1,6 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-
-const SETTINGS_ID = "singleton";
-
-async function requireSession() {
-  const session = await auth();
-  return !!session?.user;
-}
+import { requireSession, SETTINGS_ID } from "./_shared";
 
 export async function GET() {
   if (!(await requireSession())) {

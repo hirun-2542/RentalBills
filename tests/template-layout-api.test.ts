@@ -138,15 +138,38 @@ describe("Ticket 020 template layout API", () => {
   });
 
   it("PUT saves a valid layout", async () => {
-    const response = await PUT(putRequest(layout));
+    const zeroCoordinateLayout = {
+      ...layout,
+      items: [{ ...layout.items[0], x: 0, y: 0 }],
+    };
+    const response = await PUT(putRequest(zeroCoordinateLayout));
 
-    await expect(response.json()).resolves.toEqual({ layout });
+    await expect(response.json()).resolves.toEqual({
+      layout: zeroCoordinateLayout,
+    });
     expect(response.status).toBe(200);
     expect(mocks.db.settings.upsert).toHaveBeenCalledWith({
       where: { id: "singleton" },
-      create: { id: "singleton", templateLayout: layout },
-      update: { templateLayout: layout },
+      create: { id: "singleton", templateLayout: zeroCoordinateLayout },
+      update: { templateLayout: zeroCoordinateLayout },
     });
+  });
+
+  it("PUT returns 422 for too many items", async () => {
+    const response = await PUT(
+      putRequest({
+        ...layout,
+        items: Array.from({ length: 501 }, (_, index) => ({
+          ...layout.items[0],
+          id: `item-${index}`,
+        })),
+      })
+    );
+
+    await expect(response.json()).resolves.toEqual({
+      error: "items must contain 500 items or fewer",
+    });
+    expect(response.status).toBe(422);
   });
 
   it("PUT returns 422 for an unsupported variable", async () => {
@@ -173,7 +196,35 @@ describe("Ticket 020 template layout API", () => {
     );
 
     await expect(response.json()).resolves.toEqual({
-      error: "items[0].x must be a positive number",
+      error: "items[0].x must be a non-negative number",
+    });
+    expect(response.status).toBe(422);
+  });
+
+  it("PUT returns 422 for duplicate item ids", async () => {
+    const response = await PUT(
+      putRequest({
+        ...layout,
+        items: [{ ...layout.items[0] }, { ...layout.items[1], id: "tenant" }],
+      })
+    );
+
+    await expect(response.json()).resolves.toEqual({
+      error: "items[1].id must be unique",
+    });
+    expect(response.status).toBe(422);
+  });
+
+  it("PUT returns 422 for invalid color", async () => {
+    const response = await PUT(
+      putRequest({
+        ...layout,
+        items: [{ ...layout.items[0], color: "black" }],
+      })
+    );
+
+    await expect(response.json()).resolves.toEqual({
+      error: "items[0].color must be a hex color",
     });
     expect(response.status).toBe(422);
   });
@@ -219,6 +270,21 @@ describe("Ticket 020 template layout API", () => {
     expect(mocks.renderBillPdf).not.toHaveBeenCalled();
   });
 
+  it("POST returns 400 when layout has no background preview", async () => {
+    mocks.db.settings.findUnique.mockResolvedValue({
+      templateLayout: layout,
+      templatePreviewPath: null,
+    });
+
+    const response = await POST();
+
+    await expect(response.json()).resolves.toEqual({
+      error: "Template background preview is required",
+    });
+    expect(response.status).toBe(400);
+    expect(mocks.renderBillPdfFromLayout).not.toHaveBeenCalled();
+  });
+
   it("POST falls back to renderBillPdf and saves the downloaded PDF", async () => {
     mocks.db.settings.findUnique.mockResolvedValue({ templateLayout: null });
     vi.stubGlobal(
@@ -240,5 +306,23 @@ describe("Ticket 020 template layout API", () => {
       expect.objectContaining({ tenantName: "ภิญโญ สมชาย" })
     );
     await expect(readFile(previewPath, "utf8")).resolves.toBe("%PDF-fallback");
+  });
+
+  it("POST returns 502 when fallback PDF download fails", async () => {
+    mocks.db.settings.findUnique.mockResolvedValue({ templateLayout: null });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        arrayBuffer: vi.fn(),
+      })
+    );
+
+    const response = await POST();
+
+    await expect(response.json()).resolves.toEqual({
+      error: "Preview PDF download failed",
+    });
+    expect(response.status).toBe(502);
   });
 });

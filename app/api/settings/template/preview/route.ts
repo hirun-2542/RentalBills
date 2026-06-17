@@ -1,11 +1,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { renderBillPdfFromLayout } from "@/lib/pdf-renderer";
 import { renderBillPdf } from "@/lib/qorstack";
 import type { TemplateLayout } from "@/lib/template-editor";
+import { requireSession, SETTINGS_ID } from "../_shared";
 
 const PREVIEW_VARIABLES = {
   tenantName: "ภิญโญ สมชาย",
@@ -30,14 +30,8 @@ const PREVIEW_VARIABLES = {
   promptpayNumber: "0812345678",
 };
 
-const SETTINGS_ID = "singleton";
 const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads", "template");
 const PREVIEW_URL = "/uploads/template/preview-bill.pdf";
-
-async function requireSession() {
-  const session = await auth();
-  return !!session?.user;
-}
 
 export async function POST() {
   if (!(await requireSession())) {
@@ -62,7 +56,9 @@ export async function POST() {
     );
   } else {
     const pdfUrl = await renderBillPdf(PREVIEW_VARIABLES);
-    const response = await fetch(pdfUrl);
+    const response = await fetch(pdfUrl, {
+      signal: AbortSignal.timeout(10_000),
+    });
 
     if (!response.ok) {
       return NextResponse.json(
