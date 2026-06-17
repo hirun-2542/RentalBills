@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Image as KonvaImage, Layer, Stage, Text } from "react-konva/lib/ReactKonvaCore";
 import type Konva from "konva";
 import "konva/lib/shapes/Image";
 import "konva/lib/shapes/Text";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  DEFAULT_FONT_FAMILY,
+  FONT_FAMILIES,
   TEMPLATE_PAGE_HEIGHT,
   TEMPLATE_PAGE_WIDTH,
   createVariableTextItem,
@@ -16,6 +19,7 @@ import {
   updateTemplateItem,
   type TemplateLayoutItem,
 } from "@/lib/template-editor";
+import { useState } from "react";
 
 export type { TemplateLayoutItem } from "@/lib/template-editor";
 
@@ -23,6 +27,8 @@ type Props = {
   backgroundPreviewUrl: string | null;
   items: TemplateLayoutItem[];
   onItemsChange: (items: TemplateLayoutItem[]) => void;
+  selectedId: string | null;
+  onSelectedIdChange: (id: string | null) => void;
 };
 
 function useImage(url: string | null) {
@@ -46,10 +52,11 @@ export function TemplateCanvasEditor({
   backgroundPreviewUrl,
   items,
   onItemsChange,
+  selectedId,
+  onSelectedIdChange,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [displayWidth, setDisplayWidth] = useState(TEMPLATE_PAGE_WIDTH);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const image = useImage(backgroundPreviewUrl);
   const scale = displayWidth / TEMPLATE_PAGE_WIDTH;
   const displayHeight = TEMPLATE_PAGE_HEIGHT * scale;
@@ -92,7 +99,7 @@ export function TemplateCanvasEditor({
     });
 
     onItemsChange([...items, item]);
-    setSelectedId(item.id);
+    onSelectedIdChange(item.id);
   };
 
   return (
@@ -109,7 +116,7 @@ export function TemplateCanvasEditor({
           scaleX={scale}
           scaleY={scale}
           onMouseDown={(event) => {
-            if (event.target === event.target.getStage()) setSelectedId(null);
+            if (event.target === event.target.getStage()) onSelectedIdChange(null);
           }}
           className="border bg-white shadow-sm"
         >
@@ -141,12 +148,13 @@ export function TemplateCanvasEditor({
                 width={item.width}
                 height={item.height}
                 fontSize={item.fontSize}
+                fontFamily={item.fontFamily ?? DEFAULT_FONT_FAMILY}
                 text={item.type === "variable" && item.variable ? `{${item.variable}}` : item.text ?? ""}
                 fontStyle={item.fontWeight === "bold" ? "bold" : "normal"}
-                fill={item.color}
+                fill={item.id === selectedId ? "#2563eb" : item.color}
                 draggable
-                onClick={() => setSelectedId(item.id)}
-                onTap={() => setSelectedId(item.id)}
+                onClick={() => onSelectedIdChange(item.id)}
+                onTap={() => onSelectedIdChange(item.id)}
                 onDragEnd={(event: Konva.KonvaEventObject<DragEvent>) => {
                   updateItem(item.id, {
                     x: Math.round(event.target.x()),
@@ -162,6 +170,18 @@ export function TemplateCanvasEditor({
         <h2 className="text-sm font-semibold">Inspector</h2>
         {selected ? (
           <>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              className="w-full"
+              onClick={() => {
+                onItemsChange(items.filter((i) => i.id !== selectedId));
+                onSelectedIdChange(null);
+              }}
+            >
+              ลบ
+            </Button>
             {selected.type === "static" ? (
               <Field label="Text">
                 <Input
@@ -191,6 +211,19 @@ export function TemplateCanvasEditor({
                 </Field>
               ))}
             </div>
+            <Field label="Font">
+              <select
+                value={selected.fontFamily ?? DEFAULT_FONT_FAMILY}
+                onChange={(event) =>
+                  updateItem(selected.id, { fontFamily: event.target.value })
+                }
+                className="w-full rounded-md border bg-background px-3 py-1 text-sm"
+              >
+                {FONT_FAMILIES.map((f) => (
+                  <option key={f.value} value={f.value}>{f.label}</option>
+                ))}
+              </select>
+            </Field>
             <Field label="Color">
               <Input
                 type="color"

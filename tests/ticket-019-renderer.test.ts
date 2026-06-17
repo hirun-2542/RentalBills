@@ -38,6 +38,7 @@ describe("Ticket 019 PDF renderer", () => {
           height: 28,
           fontSize: 16,
           fontWeight: "bold",
+          fontFamily: "Sarabun",
           color: "#111111",
         },
         {
@@ -50,6 +51,7 @@ describe("Ticket 019 PDF renderer", () => {
           height: 28,
           fontSize: 16,
           fontWeight: "normal",
+          fontFamily: "Sarabun",
           color: "#111111",
         },
       ],

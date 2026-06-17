@@ -15,15 +15,14 @@ import { db } from "@/lib/db";
 import { requireSession, SETTINGS_ID } from "@/lib/api";
 import { convertToPreviewPng } from "@/lib/template-converter";
 const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads", "template");
-const PREVIEW_URL = "/uploads/template/preview.png";
 const MAX_UPLOAD_SIZE = 10 * 1024 * 1024;
 
-
-function getFileType(file: File): "docx" | "pdf" | null {
+function getFileType(file: File): "docx" | "pdf" | "image" | null {
   const extension = path.extname(file.name).toLowerCase();
 
   if (extension === ".docx") return "docx";
   if (extension === ".pdf") return "pdf";
+  if (extension === ".png" || extension === ".jpg" || extension === ".jpeg") return "image";
 
   return null;
 }
@@ -32,9 +31,9 @@ async function deleteTemplateFiles() {
   const files = await readdir(UPLOAD_DIR).catch(() => []);
   const staleFiles = files.filter(
     (file) =>
-      file === "background.docx" ||
-      file === "background.pdf" ||
-      file.endsWith(".png")
+      file.startsWith("background.") ||
+      file === "preview.png" ||
+      file === "preview.jpg"
   );
 
   await Promise.all(
@@ -58,7 +57,7 @@ export async function POST(request: Request) {
 
   if (!fileType) {
     return NextResponse.json(
-      { error: "Only .docx and .pdf files are supported" },
+      { error: "Only .png, .jpg, .pdf, and .docx files are supported" },
       { status: 400 }
     );
   }
@@ -72,15 +71,32 @@ export async function POST(request: Request) {
 
   await mkdir(UPLOAD_DIR, { recursive: true });
 
-  const backgroundPath = `/uploads/template/background.${fileType}`;
-  const inputPath = path.join(UPLOAD_DIR, `background.${fileType}`);
+  const ext = path.extname(file.name).toLowerCase().slice(1);
+  const backgroundPath = `/uploads/template/background.${ext}`;
+  const inputPath = path.join(UPLOAD_DIR, `background.${ext}`);
+  const fileBuffer = Buffer.from(await file.arrayBuffer());
+
+  if (fileType === "image") {
+    await deleteTemplateFiles();
+    await writeFile(inputPath, fileBuffer);
+
+    await db.settings.upsert({
+      where: { id: SETTINGS_ID },
+      create: { id: SETTINGS_ID, templateBackgroundPath: backgroundPath, templatePreviewPath: backgroundPath },
+      update: { templateBackgroundPath: backgroundPath, templatePreviewPath: backgroundPath },
+    });
+
+    return NextResponse.json({ backgroundPath, previewUrl: backgroundPath });
+  }
+
   const previewPath = path.join(UPLOAD_DIR, "preview.png");
+  const previewUrl = "/uploads/template/preview.png";
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "template-background-"));
-  const tempInputPath = path.join(tempDir, `background.${fileType}`);
+  const tempInputPath = path.join(tempDir, `background.${ext}`);
   const tempPreviewPath = path.join(tempDir, "preview.png");
 
   try {
-    await writeFile(tempInputPath, Buffer.from(await file.arrayBuffer()));
+    await writeFile(tempInputPath, fileBuffer);
     await convertToPreviewPng(tempInputPath, fileType);
     await deleteTemplateFiles();
     await copyFile(tempInputPath, inputPath);
@@ -103,18 +119,11 @@ export async function POST(request: Request) {
 
   await db.settings.upsert({
     where: { id: SETTINGS_ID },
-    create: {
-      id: SETTINGS_ID,
-      templateBackgroundPath: backgroundPath,
-      templatePreviewPath: PREVIEW_URL,
-    },
-    update: {
-      templateBackgroundPath: backgroundPath,
-      templatePreviewPath: PREVIEW_URL,
-    },
+    create: { id: SETTINGS_ID, templateBackgroundPath: backgroundPath, templatePreviewPath: previewUrl },
+    update: { templateBackgroundPath: backgroundPath, templatePreviewPath: previewUrl },
   });
 
-  return NextResponse.json({ backgroundPath, previewUrl: PREVIEW_URL });
+  return NextResponse.json({ backgroundPath, previewUrl });
 }
 
 export async function DELETE() {

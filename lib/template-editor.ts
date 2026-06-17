@@ -1,6 +1,15 @@
 export const TEMPLATE_PAGE_WIDTH = 595;
 export const TEMPLATE_PAGE_HEIGHT = 842;
 
+export const FONT_FAMILIES = [
+  { value: "Sarabun", label: "Sarabun" },
+  { value: "Noto Sans Thai", label: "Noto Sans Thai" },
+  { value: "Noto Serif Thai", label: "Noto Serif Thai" },
+  { value: "Noto Looped Thai", label: "Noto Looped Thai" },
+] as const;
+
+export const DEFAULT_FONT_FAMILY = "Sarabun";
+
 export const TEMPLATE_VARIABLES = [
   ["tenantName", "ชื่อผู้เช่า"],
   ["roomNumber", "ห้อง"],
@@ -39,6 +48,7 @@ export type TemplateLayoutItem = {
   height: number;
   fontSize: number;
   fontWeight: "normal" | "bold";
+  fontFamily: string;
   color: string;
 };
 
@@ -82,6 +92,7 @@ export function createStaticTextItem(
     height: 28,
     fontSize: 14,
     fontWeight: "normal",
+    fontFamily: DEFAULT_FONT_FAMILY,
     color: "#111111",
     ...patch,
   };

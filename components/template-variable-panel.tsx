@@ -20,6 +20,7 @@ export function TemplateVariablePanel({ onAddStaticText }: Props) {
             key={value}
             type="button"
             draggable
+            title={`Variable: {${value}}`}
             onDragStart={(event) => {
               event.dataTransfer.setData(
                 "application/x-template-variable",
@@ -27,9 +28,10 @@ export function TemplateVariablePanel({ onAddStaticText }: Props) {
               );
               event.dataTransfer.setData("text/plain", label);
             }}
-            className="rounded-md border bg-card px-3 py-2 text-left text-sm hover:bg-accent"
+            className="rounded-md border bg-card px-3 py-2 text-left hover:bg-accent"
           >
-            {label}
+            <div className="text-sm">{label}</div>
+            <div className="text-xs text-muted-foreground">{`{${value}}`}</div>
           </button>
         ))}
       </div>

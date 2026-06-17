@@ -259,6 +259,26 @@ describe("Ticket 020 template layout API", () => {
     await expect(readFile(previewPath, "utf8")).resolves.toBe("%PDF-layout");
   });
 
+  it("POST renders a background preview before layout is saved", async () => {
+    mocks.db.settings.findUnique.mockResolvedValue({
+      templateLayout: null,
+      templatePreviewPath: "/uploads/template/preview.png",
+    });
+
+    const response = await POST();
+
+    await expect(response.json()).resolves.toEqual({
+      previewUrl: "/uploads/template/preview-bill.pdf",
+    });
+    expect(response.status).toBe(200);
+    expect(mocks.renderBillPdf).not.toHaveBeenCalled();
+    expect(mocks.renderBillPdfFromLayout).toHaveBeenCalledWith(
+      { pageWidth: 595, pageHeight: 842, items: [] },
+      expect.objectContaining({ tenantName: "ภิญโญ สมชาย" }),
+      path.join(process.cwd(), "public", "/uploads/template/preview.png")
+    );
+  });
+
   it("POST returns 401 when unauthenticated", async () => {
     mocks.auth.mockResolvedValue(null);
 
@@ -324,5 +344,17 @@ describe("Ticket 020 template layout API", () => {
       error: "Preview PDF download failed",
     });
     expect(response.status).toBe(502);
+  });
+
+  it("POST returns 400 when no background exists and Qorstack is unavailable", async () => {
+    mocks.db.settings.findUnique.mockResolvedValue(null);
+    mocks.renderBillPdf.mockRejectedValue(new Error("Qorstack is not configured"));
+
+    const response = await POST();
+
+    await expect(response.json()).resolves.toEqual({
+      error: "Template background is required before preview",
+    });
+    expect(response.status).toBe(400);
   });
 });

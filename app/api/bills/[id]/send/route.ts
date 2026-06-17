@@ -23,8 +23,13 @@ function formatNumber(value: Prisma.Decimal | number) {
 }
 
 function buildTextMessage(
-  bill: NonNullable<Awaited<ReturnType<typeof findBillForSend>>>
+  bill: NonNullable<Awaited<ReturnType<typeof findBillForSend>>>,
+  appUrl: string
 ): messagingApi.TextMessage {
+  const pdfLine = bill.pdfUrl
+    ? `\n📄 PDF: ${appUrl}${bill.pdfUrl}`
+    : "";
+
   return {
     type: "text",
     text: `[ห้อง ${bill.room.number}] บิลค่าน้ำ-ค่าไฟ เดือน ${bill.month}/${bill.year}
@@ -34,7 +39,7 @@ function buildTextMessage(
 ค่าเช่า: ${formatNumber(bill.rent)} บาท
 รวมทั้งหมด: ${formatNumber(bill.total)} บาท
 
-กรุณาโอนเงินภายใน 7 วัน`,
+กรุณาโอนเงินภายใน 7 วัน${pdfLine}`,
   };
 }
 
@@ -75,26 +80,26 @@ export async function POST(_request: Request, { params }: RouteContext) {
     return NextResponse.json({ error: "บิลนี้ชำระแล้ว" }, { status: 409 });
   }
 
-  const appUrl = process.env.NEXTAUTH_URL;
+  const appUrl = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL;
 
   if (!appUrl) {
     return NextResponse.json(
-      { error: "NEXTAUTH_URL is not configured" },
+      { error: "AUTH_URL is not configured" },
       { status: 500 }
     );
   }
 
   const qrUrl = `${appUrl}/api/bills/${id}/qr`;
-  const textMsg = buildTextMessage(bill);
-  const imageMsg: messagingApi.ImageMessage = {
-    type: "image",
-    originalContentUrl: qrUrl,
-    previewImageUrl: qrUrl,
-  };
+  const textMsg = buildTextMessage(bill, appUrl);
+  const isPublicUrl = appUrl.startsWith("https://");
+  const messages: messagingApi.Message[] = isPublicUrl
+    ? [textMsg, { type: "image", originalContentUrl: qrUrl, previewImageUrl: qrUrl } satisfies messagingApi.ImageMessage]
+    : [textMsg];
 
   try {
-    await sendBillMessages(bill.tenant.lineUserId, [textMsg, imageMsg]);
-  } catch {
+    await sendBillMessages(bill.tenant.lineUserId, messages);
+  } catch (err) {
+    console.error("[LINE send error]", err);
     return NextResponse.json(
       { error: "ส่ง LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" },
       { status: 502 }

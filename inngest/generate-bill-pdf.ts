@@ -4,7 +4,6 @@ import { inngest } from "@/lib/inngest";
 import { db } from "@/lib/db";
 import { saveBillPdf } from "@/lib/pdf-storage";
 import { renderBillPdfFromLayout } from "@/lib/pdf-renderer";
-import { renderBillPdf } from "@/lib/qorstack";
 import type { TemplateLayout } from "@/lib/template-editor";
 
 
@@ -57,17 +56,18 @@ export async function generateBillPdfForBill(billId: string) {
 
   try {
     const backgroundPreviewPath = settings.templatePreviewPath;
-    const shouldUseLayout = settings.templateLayout && backgroundPreviewPath;
-    const pdfUrl = shouldUseLayout
-      ? await saveBillPdf(
-          billId,
-          await renderBillPdfFromLayout(
-            settings.templateLayout as TemplateLayout,
-            variables,
-            path.join(process.cwd(), "public", backgroundPreviewPath)
-          )
-        )
-      : await renderBillPdf(variables);
+    if (!backgroundPreviewPath) {
+      throw new Error("Template background preview is not configured");
+    }
+    const layout = (settings.templateLayout as TemplateLayout | null) ?? { pageWidth: 794, pageHeight: 1123, items: [] };
+    const pdfUrl = await saveBillPdf(
+      billId,
+      await renderBillPdfFromLayout(
+        layout,
+        variables,
+        path.join(process.cwd(), "public", backgroundPreviewPath)
+      )
+    );
 
     await db.bill.update({
       where: { id: billId },

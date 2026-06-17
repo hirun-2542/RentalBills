@@ -57,29 +57,34 @@ export async function POST(_request: Request, { params }: RouteContext) {
     );
   }
 
-  try {
-    await inngest.send({
-      name: "bill/pdf.generate",
-      data: { billId: id },
-    });
-  } catch (error) {
-    if (!isMissingInngestEventKey(error)) {
-      await db.bill.update({
-        where: { id },
-        data: {
-          pdfStatus: PdfStatus.FAILED,
-          pdfError:
-            error instanceof Error ? error.message : "Failed to queue PDF job",
-        },
-      });
-
-      return NextResponse.json(
-        { error: "ไม่สามารถเริ่มสร้าง PDF ได้" },
-        { status: 502 }
-      );
-    }
-
+  // ponytail: skip Inngest in dev — cloud can't reach localhost
+  if (process.env.NODE_ENV !== "production") {
     runLocalPdfGeneration(id);
+  } else {
+    try {
+      await inngest.send({
+        name: "bill/pdf.generate",
+        data: { billId: id },
+      });
+    } catch (error) {
+      if (!isMissingInngestEventKey(error)) {
+        await db.bill.update({
+          where: { id },
+          data: {
+            pdfStatus: PdfStatus.FAILED,
+            pdfError:
+              error instanceof Error ? error.message : "Failed to queue PDF job",
+          },
+        });
+
+        return NextResponse.json(
+          { error: "ไม่สามารถเริ่มสร้าง PDF ได้" },
+          { status: 502 }
+        );
+      }
+
+      runLocalPdfGeneration(id);
+    }
   }
 
   return NextResponse.json({ status: "queued" }, { status: 202 });

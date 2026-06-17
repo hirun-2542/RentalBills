@@ -47,13 +47,14 @@ async function buildHtml(
           ? variables[item.variable] ?? ""
           : item.text ?? "";
 
+      const fontFamily = item.fontFamily ? `'${item.fontFamily}', sans-serif` : "'Sarabun', 'Noto Sans Thai', sans-serif";
       return `<span class="item" style="left:${toNumberStyle(
         item.x
       )}px;top:${toNumberStyle(item.y)}px;width:${toNumberStyle(
         item.width
       )}px;height:${toNumberStyle(item.height)}px;font-size:${toNumberStyle(
         item.fontSize
-      )}px;font-weight:${toFontWeight(item.fontWeight)};color:${toColor(
+      )}px;font-weight:${toFontWeight(item.fontWeight)};font-family:${fontFamily};color:${toColor(
         item.color
       )};">${escapeHtml(value)}</span>`;
     })

@@ -22,9 +22,8 @@ const TemplateCanvasEditor = dynamic(
 
 export default function TemplateSettingsPage() {
   const [items, setItems] = useState<TemplateLayoutItem[]>([]);
-  const [backgroundPreviewUrl, setBackgroundPreviewUrl] = useState<string | null>(
-    null
-  );
+  const [backgroundPreviewUrl, setBackgroundPreviewUrl] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [status, setStatus] = useState("");
 
   useEffect(() => {
@@ -131,7 +130,7 @@ export default function TemplateSettingsPage() {
             Upload background
             <input
               type="file"
-              accept=".pdf,.docx"
+              accept=".png,.jpg,.jpeg,.pdf,.docx"
               className="hidden"
               onChange={(event) =>
                 uploadBackground(event.currentTarget.files?.[0] ?? null)
@@ -157,15 +156,19 @@ export default function TemplateSettingsPage() {
 
       <div className="flex flex-col gap-4 md:flex-row">
         <TemplateVariablePanel
-          onAddStaticText={() =>
-            setItems((current) => [...current, createStaticTextItem()])
-          }
+          onAddStaticText={() => {
+            const item = createStaticTextItem();
+            setItems((current) => [...current, item]);
+            setSelectedId(item.id);
+          }}
         />
         <main className="min-w-0 flex-1">
           <TemplateCanvasEditor
             backgroundPreviewUrl={backgroundPreviewUrl}
             items={items}
             onItemsChange={setItems}
+            selectedId={selectedId}
+            onSelectedIdChange={setSelectedId}
           />
         </main>
       </div>

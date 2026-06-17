@@ -3,8 +3,11 @@ import path from "node:path";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { renderBillPdfFromLayout } from "@/lib/pdf-renderer";
-import { renderBillPdf } from "@/lib/qorstack";
-import type { TemplateLayout } from "@/lib/template-editor";
+import {
+  TEMPLATE_PAGE_HEIGHT,
+  TEMPLATE_PAGE_WIDTH,
+  type TemplateLayout,
+} from "@/lib/template-editor";
 import { requireSession, SETTINGS_ID } from "@/lib/api";
 
 const PREVIEW_VARIABLES = {
@@ -32,6 +35,11 @@ const PREVIEW_VARIABLES = {
 
 const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads", "template");
 const PREVIEW_URL = "/uploads/template/preview-bill.pdf";
+const EMPTY_LAYOUT: TemplateLayout = {
+  pageWidth: TEMPLATE_PAGE_WIDTH,
+  pageHeight: TEMPLATE_PAGE_HEIGHT,
+  items: [],
+};
 
 export async function POST() {
   if (!(await requireSession())) {
@@ -41,34 +49,28 @@ export async function POST() {
   const settings = await db.settings.findUnique({ where: { id: SETTINGS_ID } });
   let buffer: Buffer;
 
-  if (settings?.templateLayout) {
-    if (!settings.templatePreviewPath) {
-      return NextResponse.json(
-        { error: "Template background preview is required" },
-        { status: 400 }
-      );
-    }
-
-    buffer = await renderBillPdfFromLayout(
-      settings.templateLayout as TemplateLayout,
-      PREVIEW_VARIABLES,
-      path.join(process.cwd(), "public", settings.templatePreviewPath)
+  if (settings?.templateLayout && !settings.templatePreviewPath) {
+    return NextResponse.json(
+      { error: "Template background preview is required" },
+      { status: 400 }
     );
-  } else {
-    const pdfUrl = await renderBillPdf(PREVIEW_VARIABLES);
-    const response = await fetch(pdfUrl, {
-      signal: AbortSignal.timeout(10_000),
-    });
-
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: "Preview PDF download failed" },
-        { status: 502 }
-      );
-    }
-
-    buffer = Buffer.from(await response.arrayBuffer());
   }
+
+  if (!settings?.templatePreviewPath) {
+    return NextResponse.json(
+      { error: "Template background is required before preview" },
+      { status: 400 }
+    );
+  }
+
+  const layout =
+    (settings.templateLayout as TemplateLayout | null) ?? EMPTY_LAYOUT;
+
+  buffer = await renderBillPdfFromLayout(
+    layout,
+    PREVIEW_VARIABLES,
+    path.join(process.cwd(), "public", settings.templatePreviewPath)
+  );
 
   await mkdir(UPLOAD_DIR, { recursive: true });
   await writeFile(path.join(UPLOAD_DIR, "preview-bill.pdf"), buffer);
