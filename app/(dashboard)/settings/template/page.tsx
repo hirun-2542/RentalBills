@@ -50,21 +50,26 @@ export default function TemplateSettingsPage() {
     formData.set("file", file);
     setStatus("กำลังอัปโหลด...");
 
-    const response = await fetch("/api/settings/template/background", {
-      method: "POST",
-      body: formData,
-    });
-    const data = (await response.json().catch(() => ({}))) as {
-      previewUrl?: string | null;
-    };
+    try {
+      const response = await fetch("/api/settings/template/background", {
+        method: "POST",
+        body: formData,
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        previewUrl?: string | null;
+        error?: string;
+      };
 
-    if (!response.ok) {
-      setStatus("อัปโหลดไม่สำเร็จ");
-      return;
+      if (!response.ok) {
+        setStatus(`อัปโหลดไม่สำเร็จ: ${data.error ?? response.statusText}`);
+        return;
+      }
+
+      setBackgroundPreviewUrl(data.previewUrl ?? null);
+      setStatus("อัปโหลดแล้ว");
+    } catch {
+      setStatus("อัปโหลดไม่สำเร็จ: เชื่อมต่อ server ไม่ได้");
     }
-
-    setBackgroundPreviewUrl(data.previewUrl ?? null);
-    setStatus("อัปโหลดแล้ว");
   };
 
   const clearBackground = async () => {

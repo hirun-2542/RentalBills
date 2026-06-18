@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   fromChannelAccessToken: vi.fn(),
   db: {
     room: { findFirst: vi.fn() },
-    tenant: { findFirst: vi.fn(), update: vi.fn() },
+    tenant: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
     bill: { findFirst: vi.fn(), update: vi.fn() },
     settings: { findUnique: vi.fn() },
     paymentSlip: { create: vi.fn() },
@@ -98,6 +98,7 @@ describe("Ticket 021 LINE webhook", () => {
     vi.clearAllMocks();
     process.env.LINE_CHANNEL_SECRET = "secret";
     process.env.LINE_CHANNEL_ACCESS_TOKEN = "token";
+    process.env.AUTH_SECRET = "registration-test-secret";
     process.env.AUTH_URL = "https://rental.test";
     delete process.env.NEXTAUTH_URL;
 
@@ -108,6 +109,7 @@ describe("Ticket 021 LINE webhook", () => {
     });
     mocks.replyMessage.mockResolvedValue(undefined);
     mocks.db.tenant.update.mockResolvedValue(undefined);
+    mocks.db.tenant.create.mockResolvedValue(undefined);
     mocks.db.bill.update.mockResolvedValue(undefined);
     mocks.db.paymentSlip.create.mockResolvedValue(undefined);
     mocks.db.$transaction.mockImplementation((callback) => callback(mocks.db));
@@ -129,7 +131,7 @@ describe("Ticket 021 LINE webhook", () => {
     }]));
 
     expect(response.status).toBe(200);
-    expectReply("ยินดีต้อนรับ! 🏠 กรุณาส่งหมายเลขห้องของคุณ (เช่น 101) เพื่อลงทะเบียน LINE ของคุณกับระบบ");
+    expectReply("ยินดีต้อนรับ! 🏠 กรุณากดปุ่ม “ลงทะเบียน” ที่เมนูด้านล่างเพื่อเชื่อม LINE กับห้องพัก");
   });
 
   it("reports when a room has no active tenant", async () => {
@@ -219,7 +221,7 @@ describe("Ticket 021 LINE webhook", () => {
     expectReply("ไม่พบบิลที่รอชำระ");
   });
 
-  it("sends bill summary, bill preview, and PromptPay QR", async () => {
+  it("sends bill summary, PDF button, and PromptPay QR", async () => {
     mocks.db.tenant.findFirst.mockResolvedValue(tenant());
     mocks.db.bill.findFirst.mockResolvedValue(bill());
 
@@ -240,9 +242,19 @@ describe("Ticket 021 LINE webhook", () => {
           text: expect.stringContaining("[ห้อง 101] บิลค่าน้ำ-ค่าไฟ เดือน 6/2026"),
         },
         {
-          type: "image",
-          originalContentUrl: "https://rental.test/uploads/bills/bill-1.png",
-          previewImageUrl: "https://rental.test/uploads/bills/bill-1.png",
+          type: "template",
+          altText: "ดูบิล PDF ห้อง 101",
+          template: {
+            type: "buttons",
+            text: "บิลห้อง 101 เดือน 6/2026",
+            actions: [
+              {
+                type: "uri",
+                label: "ดูบิล PDF",
+                uri: "https://rental.test/bills/bill-1.pdf",
+              },
+            ],
+          },
         },
         {
           type: "image",
@@ -255,6 +267,146 @@ describe("Ticket 021 LINE webhook", () => {
     expect(mocks.replyMessage.mock.calls[0][0].messages[0].text).toContain(
       "ค่าน้ำ: 5 หน่วย × 9 + 10 บาท = 55 บาท"
     );
+  });
+
+  it("registers name, phone, and room for an existing active tenant", async () => {
+    mocks.db.tenant.findFirst.mockResolvedValue(null);
+    mocks.db.room.findFirst.mockResolvedValue({
+      id: "room-1",
+      number: "101",
+      tenants: [tenant(null)],
+    });
+
+    await POST(request([textEvent("ลงทะเบียน: สมชาย ใจดี, 081-234-5678, 101")]));
+
+    expect(mocks.db.tenant.update).toHaveBeenCalledWith({
+      where: { id: "tenant-1" },
+      data: {
+        name: "สมชาย ใจดี",
+        phone: "0812345678",
+        lineUserId: "U123",
+      },
+    });
+    expectReply("✅ ลงทะเบียน สมชาย ใจดี ห้อง 101 เรียบร้อยแล้ว");
+  });
+
+  it("returns a secure registration form button", async () => {
+    await POST(request([textEvent("ลงทะเบียน")]));
+
+    expect(mocks.replyMessage).toHaveBeenCalledWith({
+      replyToken: "reply-token",
+      messages: [
+        {
+          type: "template",
+          altText: "ลงทะเบียนผู้เข้าพัก",
+          template: {
+            type: "buttons",
+            text: "กรอกชื่อ เบอร์โทร และเลขห้องที่เข้าพัก",
+            actions: [
+              {
+                type: "uri",
+                label: "เปิดแบบฟอร์มลงทะเบียน",
+                uri: expect.stringMatching(
+                  /^https:\/\/rental\.test\/line\/register\?token=/
+                ),
+              },
+            ],
+          },
+        },
+      ],
+    });
+  });
+
+  it("creates an active tenant when registering an empty room", async () => {
+    mocks.db.tenant.findFirst.mockResolvedValue(null);
+    mocks.db.room.findFirst.mockResolvedValue({
+      id: "room-1",
+      number: "101",
+      tenants: [],
+    });
+
+    await POST(request([textEvent("ลงทะเบียน: สมชาย ใจดี, 0812345678, 101")]));
+
+    expect(mocks.db.tenant.create).toHaveBeenCalledWith({
+      data: {
+        roomId: "room-1",
+        name: "สมชาย ใจดี",
+        phone: "0812345678",
+        lineUserId: "U123",
+      },
+    });
+    expectReply("✅ ลงทะเบียน สมชาย ใจดี ห้อง 101 เรียบร้อยแล้ว");
+  });
+
+  it("rejects invalid registration details", async () => {
+    await POST(request([textEvent("ลงทะเบียน: สมชาย, 123, 101")]));
+
+    expect(mocks.db.room.findFirst).not.toHaveBeenCalled();
+    expectReply(
+      "กรุณากรอกข้อมูลรูปแบบ ลงทะเบียน: ชื่อ, เบอร์โทร, ห้องพัก เช่น ลงทะเบียน: สมชาย ใจดี, 0812345678, 101"
+    );
+  });
+
+  it("acknowledges a complaint for the linked room", async () => {
+    mocks.db.tenant.findFirst.mockResolvedValue(tenant());
+
+    const response = await POST(request([textEvent("ร้องเรียน: น้ำไม่ไหล")]));
+
+    expect(response.status).toBe(200);
+    expectReply("✅ รับเรื่องร้องเรียนของห้อง 101 แล้ว\n\nรายละเอียด: น้ำไม่ไหล\n\nเจ้าของห้องจะเห็นข้อความนี้ใน LINE OA และติดต่อกลับ");
+    expect(mocks.db.room.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("asks for complaint details when none are provided", async () => {
+    mocks.db.tenant.findFirst.mockResolvedValue(tenant());
+
+    await POST(request([textEvent("ร้องเรียน:")]));
+
+    expectReply("กรุณาพิมพ์รายละเอียดต่อจากคำว่า ร้องเรียน:");
+  });
+
+  it("rejects complaint from an unregistered user", async () => {
+    mocks.db.tenant.findFirst.mockResolvedValue(null);
+
+    await POST(request([textEvent("ร้องเรียน: น้ำไม่ไหล")]));
+
+    expectReply("ไม่พบข้อมูลผู้เช่า กรุณาลงทะเบียนห้องก่อน");
+  });
+
+  it("rejects registration when LINE already linked to a different room", async () => {
+    mocks.db.tenant.findFirst.mockResolvedValue({
+      ...tenant(),
+      room: { id: "room-2", number: "102" },
+    });
+
+    await POST(request([textEvent("ลงทะเบียน: สมชาย ใจดี, 0812345678, 101")]));
+
+    expect(mocks.db.room.findFirst).not.toHaveBeenCalled();
+    expectReply("LINE ของคุณลงทะเบียนกับห้อง 102 อยู่แล้ว กรุณาติดต่อเจ้าของห้อง");
+  });
+
+  it("rejects registration when room is not found", async () => {
+    mocks.db.tenant.findFirst.mockResolvedValue(null);
+    mocks.db.room.findFirst.mockResolvedValue(null);
+
+    await POST(request([textEvent("ลงทะเบียน: สมชาย ใจดี, 0812345678, 999")]));
+
+    expect(mocks.db.tenant.update).not.toHaveBeenCalled();
+    expectReply("ไม่พบห้อง 999 กรุณาตรวจสอบหมายเลขห้อง");
+  });
+
+  it("rejects registration when room already has a different LINE user", async () => {
+    mocks.db.tenant.findFirst.mockResolvedValue(null);
+    mocks.db.room.findFirst.mockResolvedValue({
+      id: "room-1",
+      number: "101",
+      tenants: [tenant("U999")],
+    });
+
+    await POST(request([textEvent("ลงทะเบียน: สมชาย ใจดี, 0812345678, 101")]));
+
+    expect(mocks.db.tenant.update).not.toHaveBeenCalled();
+    expectReply("ห้อง 101 มี LINE อื่นลงทะเบียนอยู่แล้ว กรุณาติดต่อเจ้าของห้อง");
   });
 
   it("rejects a slip from an unknown LINE user", async () => {

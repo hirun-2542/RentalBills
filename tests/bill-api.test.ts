@@ -30,7 +30,7 @@ const mocks = vi.hoisted(() => ({
     },
     $transaction: vi.fn(),
   },
-  generatePromptPayQR: vi.fn(),
+  generatePromptPayCard: vi.fn(),
   sendBillMessages: vi.fn(),
   inngest: {
     send: vi.fn(),
@@ -55,7 +55,7 @@ vi.mock("@/inngest/generate-bill-pdf", () => ({
 }));
 
 vi.mock("@/lib/promptpay", () => ({
-  generatePromptPayQR: mocks.generatePromptPayQR,
+  generatePromptPayCard: mocks.generatePromptPayCard,
 }));
 
 vi.mock("@/lib/line", () => ({
@@ -127,7 +127,7 @@ describe("Ticket 006 bill API routes", () => {
       ...data,
     }));
     mocks.db.$transaction.mockImplementation(async (operations) => operations);
-    mocks.generatePromptPayQR.mockResolvedValue(Buffer.from("png"));
+    mocks.generatePromptPayCard.mockResolvedValue(Buffer.from("png"));
     mocks.sendBillMessages.mockResolvedValue(undefined);
     mocks.generateBillPdfForBill.mockResolvedValue({
       pdfUrl: "/uploads/bills/bill-1.pdf",
@@ -504,9 +504,13 @@ describe("Ticket 006 bill API routes", () => {
     });
     expect(mocks.db.settings.findUnique).toHaveBeenCalledWith({
       where: { id: "singleton" },
-      select: { promptpayNumber: true },
+      select: { promptpayNumber: true, bankAccountName: true },
     });
-    expect(mocks.generatePromptPayQR).toHaveBeenCalledWith("0812345678", 3150);
+    expect(mocks.generatePromptPayCard).toHaveBeenCalledWith(
+      "0812345678",
+      3150,
+      "Rental Bills"
+    );
   });
 
   it.each(["", "   "])(
@@ -527,7 +531,7 @@ describe("Ticket 006 bill API routes", () => {
         error: "ยังไม่ได้ตั้งค่า PromptPay",
       });
       expect(response.status).toBe(422);
-      expect(mocks.generatePromptPayQR).not.toHaveBeenCalled();
+      expect(mocks.generatePromptPayCard).not.toHaveBeenCalled();
     }
   );
 
@@ -545,7 +549,7 @@ describe("Ticket 006 bill API routes", () => {
       error: "ยังไม่ได้ตั้งค่า PromptPay",
     });
     expect(response.status).toBe(422);
-    expect(mocks.generatePromptPayQR).not.toHaveBeenCalled();
+    expect(mocks.generatePromptPayCard).not.toHaveBeenCalled();
   });
 
   it("GET /api/bills/:id/qr returns 404 when the bill is missing", async () => {
@@ -558,7 +562,7 @@ describe("Ticket 006 bill API routes", () => {
     await expect(response.json()).resolves.toEqual({ error: "Bill not found" });
     expect(response.status).toBe(404);
     expect(mocks.db.settings.findUnique).not.toHaveBeenCalled();
-    expect(mocks.generatePromptPayQR).not.toHaveBeenCalled();
+    expect(mocks.generatePromptPayCard).not.toHaveBeenCalled();
   });
 
   it("POST /api/bills/:id/send returns 422 when PDF is not done", async () => {
@@ -597,6 +601,7 @@ describe("Ticket 006 bill API routes", () => {
   it("POST /api/bills/:id/send returns 422 when tenant has no LINE User ID", async () => {
     mocks.db.bill.findUnique.mockResolvedValue({
       pdfStatus: PdfStatus.DONE,
+      pdfUrl: "/uploads/bills/bill-1.pdf",
       status: BillStatus.DRAFT,
       tenant: { lineUserId: null },
       room: { number: "101" },
@@ -617,6 +622,7 @@ describe("Ticket 006 bill API routes", () => {
   it("POST /api/bills/:id/send returns 409 when bill is already paid", async () => {
     mocks.db.bill.findUnique.mockResolvedValue({
       pdfStatus: PdfStatus.DONE,
+      pdfUrl: "/uploads/bills/bill-1.pdf",
       status: BillStatus.PAID,
       tenant: { lineUserId: "U123" },
       room: { number: "101" },
@@ -640,6 +646,7 @@ describe("Ticket 006 bill API routes", () => {
       month: 6,
       year: 2026,
       pdfStatus: PdfStatus.DONE,
+      pdfUrl: "/uploads/bills/bill-1.pdf",
       status: BillStatus.DRAFT,
       waterUsage: 5,
       waterRatePerUnit: decimal(9),
@@ -680,9 +687,19 @@ describe("Ticket 006 bill API routes", () => {
         ),
       }),
       {
-        type: "image",
-        originalContentUrl: "https://rental.test/uploads/bills/bill-1.png",
-        previewImageUrl: "https://rental.test/uploads/bills/bill-1.png",
+        type: "template",
+        altText: "ดูบิล PDF ห้อง 101",
+        template: {
+          type: "buttons",
+          text: "บิลห้อง 101 เดือน 6/2026",
+          actions: [
+            {
+              type: "uri",
+              label: "ดูบิล PDF",
+              uri: "https://rental.test/uploads/bills/bill-1.pdf",
+            },
+          ],
+        },
       },
       {
         type: "image",
@@ -708,6 +725,7 @@ describe("Ticket 006 bill API routes", () => {
       month: 6,
       year: 2026,
       pdfStatus: PdfStatus.DONE,
+      pdfUrl: "/uploads/bills/bill-1.pdf",
       status: BillStatus.DRAFT,
       waterUsage: 5,
       waterRatePerUnit: decimal(9),
@@ -741,6 +759,7 @@ describe("Ticket 006 bill API routes", () => {
       month: 6,
       year: 2026,
       pdfStatus: PdfStatus.DONE,
+      pdfUrl: "/uploads/bills/bill-1.pdf",
       status: BillStatus.DRAFT,
       waterUsage: 5,
       waterRatePerUnit: decimal(9),

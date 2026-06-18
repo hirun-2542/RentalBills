@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { generatePromptPayQR } from "@/lib/promptpay";
+import { generatePromptPayCard } from "@/lib/promptpay";
 import { SETTINGS_ID } from "@/lib/api";
 
 type RouteContext = {
@@ -25,8 +25,8 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
   const settings = (await db.settings.findUnique({
     where: { id: SETTINGS_ID },
-    select: { promptpayNumber: true },
-  })) ?? { promptpayNumber: "" };
+    select: { promptpayNumber: true, bankAccountName: true },
+  })) ?? { promptpayNumber: "", bankAccountName: "" };
 
   if (!settings.promptpayNumber.trim()) {
     return NextResponse.json(
@@ -35,9 +35,10 @@ export async function GET(_request: Request, { params }: RouteContext) {
     );
   }
 
-  const qr = await generatePromptPayQR(
+  const qr = await generatePromptPayCard(
     settings.promptpayNumber,
-    toNumber(bill.total)
+    toNumber(bill.total),
+    settings.bankAccountName
   );
 
   return new Response(new Uint8Array(qr), {

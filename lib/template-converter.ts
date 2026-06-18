@@ -1,74 +1,97 @@
-import { execFile } from "node:child_process";
-import { access, rename, unlink } from "node:fs/promises";
+import { createServer } from "node:http";
+import { readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
+import puppeteer from "puppeteer";
 
-const execFileAsync = promisify(execFile);
-
-function getLibreOfficeCandidates() {
-  return [
-    process.env.LIBREOFFICE_BIN,
-    "libreoffice",
-    "soffice",
-    "/usr/bin/libreoffice",
-    "/usr/local/bin/libreoffice",
-    "/opt/libreoffice/program/soffice",
-  ].filter(Boolean) as string[];
-}
-
-function getPdfToPngCandidates() {
-  return [
-    process.env.PDFTOPPM_BIN,
-    "pdftoppm",
-    "/usr/bin/pdftoppm",
-    "/usr/local/bin/pdftoppm",
-  ].filter(Boolean) as string[];
-}
-
-async function runFirstAvailable(candidates: string[], args: string[]) {
-  const missing: string[] = [];
-
-  for (const command of candidates) {
-    try {
-      await execFileAsync(command, args, { timeout: 30_000 });
-      return;
-    } catch (error) {
-      if (
-        error &&
-        typeof error === "object" &&
-        "code" in error &&
-        error.code === "ENOENT"
-      ) {
-        missing.push(command);
-        continue;
-      }
-
-      throw error;
-    }
-  }
-
-  throw new Error(`Executable not found: ${missing.join(", ")}`);
-}
-
-async function runLibreOffice(args: string[]) {
-  await runFirstAvailable(getLibreOfficeCandidates(), args);
+async function launchBrowser() {
+  return puppeteer.launch({ args: ["--no-sandbox", "--disable-setuid-sandbox"] });
 }
 
 async function convertPdfToPng(inputPath: string, previewPath: string) {
-  const outputPrefix = previewPath.replace(/\.png$/i, "");
+  const pdfBuffer = await readFile(inputPath);
 
-  await runFirstAvailable(getPdfToPngCandidates(), [
-    "-png",
-    "-singlefile",
-    "-f",
-    "1",
-    "-l",
-    "1",
-    "-r",
-    "144",
-    inputPath,
-    outputPrefix,
-  ]);
+  const server = createServer((_req, res) => {
+    res.setHeader("Content-Type", "application/pdf");
+    res.end(pdfBuffer);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as { port: number };
+
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 794, height: 1123 });
+    await page.goto(`http://127.0.0.1:${port}/doc.pdf`, {
+      waitUntil: "load",
+      timeout: 30_000,
+    });
+    // give the PDF viewer a moment to finish rendering
+    await new Promise((r) => setTimeout(r, 1500));
+    const screenshot = await page.screenshot({ type: "png" });
+    await writeFile(previewPath, screenshot);
+    await page.close();
+  } finally {
+    await browser.close();
+    server.close();
+  }
+}
+
+async function convertDocxToPng(inputPath: string, previewPath: string) {
+  const cwd = process.cwd();
+  const jszipBundle = path.join(cwd, "node_modules/jszip/dist/jszip.min.js");
+  const docxPreviewBundle = path.join(cwd, "node_modules/docx-preview/dist/docx-preview.min.js");
+
+  const docxBuffer = await readFile(inputPath);
+  const base64 = docxBuffer.toString("base64");
+
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 794, height: 1123 });
+
+    await page.setContent(
+      `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: white; width: 794px; }
+    .docx-wrapper { background: white !important; padding: 0 !important; margin: 0 !important; }
+    .docx-wrapper > section.docx { padding: 0 !important; }
+  </style>
+</head>
+<body><div id="c"></div></body>
+</html>`,
+      { waitUntil: "load" }
+    );
+
+    await page.addScriptTag({ path: jszipBundle });
+    await page.evaluate(() => {
+      (window as unknown as Record<string, unknown>).jszip =
+        (window as unknown as Record<string, unknown>).JSZip;
+    });
+    await page.addScriptTag({ path: docxPreviewBundle });
+
+    await page.evaluate((b64: string) => {
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const blob = new Blob([bytes]);
+      return (
+        window as unknown as {
+          docx: { renderAsync: (b: Blob, el: Element | null, s: null, o: object) => Promise<void> };
+        }
+      ).docx.renderAsync(blob, document.getElementById("c"), null, {
+        inWrapper: false,
+        ignoreWidth: false,
+      });
+    }, base64);
+
+    const screenshot = await page.screenshot({ type: "png", fullPage: false });
+    await writeFile(previewPath, screenshot);
+    await page.close();
+  } finally {
+    await browser.close();
+  }
 }
 
 export async function convertToPreviewPng(
@@ -77,55 +100,19 @@ export async function convertToPreviewPng(
 ): Promise<string> {
   const outdir = path.dirname(inputPath);
   const previewPath = path.join(outdir, "preview.png");
-  const generatedPath = path.join(
-    outdir,
-    `${path.basename(inputPath, `.${fileType}`)}.png`
-  );
-  let generatedPreviewPath = fileType === "docx" ? generatedPath : previewPath;
 
   await unlink(previewPath).catch(() => {});
 
   try {
     if (fileType === "pdf") {
-      await convertPdfToPng(inputPath, previewPath).catch(async (error) => {
-        if (!(error instanceof Error) || !error.message.includes("not found")) {
-          throw error;
-        }
-
-        generatedPreviewPath = generatedPath;
-        await runLibreOffice([
-          "--headless",
-          "--convert-to",
-          "png",
-          "--outdir",
-          outdir,
-          inputPath,
-        ]);
-      });
+      await convertPdfToPng(inputPath, previewPath);
     } else {
-      await runLibreOffice([
-        "--headless",
-        "--convert-to",
-        "png",
-        "--outdir",
-        outdir,
-        inputPath,
-      ]);
+      await convertDocxToPng(inputPath, previewPath);
     }
   } catch (error) {
     throw new Error(
-      `Failed to convert template preview. Ensure ${
-        fileType === "pdf" ? "pdftoppm or LibreOffice" : "LibreOffice"
-      } is installed. ${
-        error instanceof Error ? error.message : ""
-      }`
+      `Failed to convert ${fileType} to preview: ${error instanceof Error ? error.message : String(error)}`
     );
-  }
-
-  await access(generatedPreviewPath);
-
-  if (generatedPreviewPath !== previewPath) {
-    await rename(generatedPreviewPath, previewPath);
   }
 
   return previewPath;

@@ -4,7 +4,6 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { sendBillMessages } from "@/lib/line";
 import { requireSession } from "@/lib/api";
-import { getBillPreviewUrl } from "@/lib/pdf-storage";
 import { serialize } from "@/lib/serialize";
 
 type RouteContext = {
@@ -58,7 +57,7 @@ export async function POST(_request: Request, { params }: RouteContext) {
     return NextResponse.json({ error: "Bill not found" }, { status: 404 });
   }
 
-  if (bill.pdfStatus !== PdfStatus.DONE) {
+  if (bill.pdfStatus !== PdfStatus.DONE || !bill.pdfUrl) {
     return NextResponse.json(
       { error: "กรุณาสร้าง PDF ก่อนส่ง" },
       { status: 422 }
@@ -86,13 +85,21 @@ export async function POST(_request: Request, { params }: RouteContext) {
   }
 
   const qrUrl = `${appUrl}/api/bills/${id}/qr`;
-  const previewUrl = `${appUrl}${getBillPreviewUrl(id)}`;
+  const pdfUrl = `${appUrl}${bill.pdfUrl}`;
   const textMsg = buildTextMessage(bill);
   const isPublicUrl = appUrl.startsWith("https://");
   const messages: messagingApi.Message[] = isPublicUrl
     ? [
         textMsg,
-        { type: "image", originalContentUrl: previewUrl, previewImageUrl: previewUrl },
+        {
+          type: "template",
+          altText: `ดูบิล PDF ห้อง ${bill.room.number}`,
+          template: {
+            type: "buttons",
+            text: `บิลห้อง ${bill.room.number} เดือน ${bill.month}/${bill.year}`,
+            actions: [{ type: "uri", label: "ดูบิล PDF", uri: pdfUrl }],
+          },
+        },
         { type: "image", originalContentUrl: qrUrl, previewImageUrl: qrUrl },
       ]
     : [textMsg];
