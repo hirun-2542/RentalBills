@@ -257,6 +257,24 @@ describe("Ticket 021 LINE webhook", () => {
     );
   });
 
+  it("acknowledges a complaint for the linked room", async () => {
+    mocks.db.tenant.findFirst.mockResolvedValue(tenant());
+
+    const response = await POST(request([textEvent("ร้องเรียน: น้ำไม่ไหล")]));
+
+    expect(response.status).toBe(200);
+    expectReply("✅ รับเรื่องร้องเรียนของห้อง 101 แล้ว เจ้าของห้องจะตรวจสอบและติดต่อกลับ");
+    expect(mocks.db.room.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("asks for complaint details when none are provided", async () => {
+    mocks.db.tenant.findFirst.mockResolvedValue(tenant());
+
+    await POST(request([textEvent("ร้องเรียน:")]));
+
+    expectReply("กรุณาพิมพ์รายละเอียดต่อจากคำว่า ร้องเรียน:");
+  });
+
   it("rejects a slip from an unknown LINE user", async () => {
     mocks.db.tenant.findFirst.mockResolvedValue(null);
 

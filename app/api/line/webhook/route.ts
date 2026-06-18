@@ -157,6 +157,40 @@ async function handleBillRequest(
   }
 }
 
+async function handleComplaint(
+  event: webhook.MessageEvent,
+  token: string,
+  text: string
+) {
+  try {
+    const userId = event.source?.userId;
+    if (!userId) return;
+
+    const tenant = await db.tenant.findFirst({
+      where: { lineUserId: userId, active: true },
+      include: { room: true },
+    });
+    if (!tenant) {
+      await replyText(event.replyToken!, "ไม่พบข้อมูลผู้เช่า กรุณาลงทะเบียนห้องก่อน", token);
+      return;
+    }
+
+    const detail = text.slice("ร้องเรียน:".length).trim();
+    if (!detail) {
+      await replyText(event.replyToken!, "กรุณาพิมพ์รายละเอียดต่อจากคำว่า ร้องเรียน:", token);
+      return;
+    }
+
+    await replyText(
+      event.replyToken!,
+      `✅ รับเรื่องร้องเรียนของห้อง ${tenant.room.number} แล้ว เจ้าของห้องจะตรวจสอบและติดต่อกลับ`,
+      token
+    );
+  } catch (err) {
+    console.error("[handleComplaint error]", err);
+  }
+}
+
 async function handleSlip(event: webhook.MessageEvent, token: string) {
   try {
     if (event.message.type !== "image") return;
@@ -237,6 +271,8 @@ export async function POST(request: Request) {
             const text = (msgEvent.message as webhook.TextMessageContent).text.trim().toLowerCase();
             if (text === "บิล") {
               await handleBillRequest(msgEvent, channelAccessToken, appUrl);
+            } else if (text.startsWith("ร้องเรียน:")) {
+              await handleComplaint(msgEvent, channelAccessToken, text);
             } else {
               await handleRoomLink(msgEvent, channelAccessToken);
             }
