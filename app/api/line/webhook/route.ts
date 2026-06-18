@@ -2,7 +2,6 @@ import { validateSignature, LineBotClient } from "@line/bot-sdk";
 import type { messagingApi, webhook } from "@line/bot-sdk";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { sendBillMessages } from "@/lib/line";
 
 function getConfig() {
   const channelSecret = process.env.LINE_CHANNEL_SECRET;
@@ -47,7 +46,6 @@ async function handleRoomLink(
         tenants: {
           where: { active: true },
           take: 1,
-          include: { room: true },
         },
       },
     });
@@ -117,10 +115,10 @@ async function handleBillRequest(
     const pdfLine = bill.pdfUrl ? `\n📄 PDF: ${appUrl}${bill.pdfUrl}` : "";
     const text = `[ห้อง ${bill.room.number}] บิลค่าน้ำ-ค่าไฟ เดือน ${bill.month}/${bill.year}
 
-ค่าน้ำ: ${bill.waterUsage} หน่วย × ${bill.waterRatePerUnit} + ${bill.waterCollectionFee} บาท = ${bill.waterTotal} บาท
-ค่าไฟ: ${bill.elecUsage} หน่วย × ${bill.elecRatePerUnit} = ${bill.elecTotal} บาท
-ค่าเช่า: ${bill.rent} บาท
-รวมทั้งหมด: ${bill.total} บาท
+ค่าน้ำ: ${bill.waterUsage} หน่วย × ${Number(bill.waterRatePerUnit)} + ${Number(bill.waterCollectionFee)} บาท = ${Number(bill.waterTotal)} บาท
+ค่าไฟ: ${bill.elecUsage} หน่วย × ${Number(bill.elecRatePerUnit)} = ${Number(bill.elecTotal)} บาท
+ค่าเช่า: ${Number(bill.rent)} บาท
+รวมทั้งหมด: ${Number(bill.total)} บาท
 
 ธนาคาร: ${settings?.bankAccountName ?? ""} เลขที่ ${settings?.bankAccountNumber ?? ""}${pdfLine}`;
     const messages: messagingApi.Message[] = [{ type: "text", text }];
@@ -134,7 +132,8 @@ async function handleBillRequest(
       });
     }
 
-    await sendBillMessages(userId, messages);
+    const client = LineBotClient.fromChannelAccessToken({ channelAccessToken: token });
+    await client.replyMessage({ replyToken: event.replyToken!, messages });
   } catch (err) {
     console.error("[handleBillRequest error]", err);
   }
@@ -172,12 +171,14 @@ async function handleSlip(event: webhook.MessageEvent, token: string) {
     const buffer = Buffer.concat(chunks);
     const imageUrl = `data:image/jpeg;base64,${buffer.toString("base64")}`;
 
-    await db.paymentSlip.create({
-      data: { billId: bill.id, imageUrl, submittedAt: new Date() },
-    });
-    await db.bill.update({
-      where: { id: bill.id },
-      data: { status: "PAID", paidAt: new Date() },
+    await db.$transaction(async (tx) => {
+      await tx.paymentSlip.create({
+        data: { billId: bill.id, imageUrl, submittedAt: new Date() },
+      });
+      await tx.bill.update({
+        where: { id: bill.id },
+        data: { status: "PAID", paidAt: new Date() },
+      });
     });
     await replyText(
       event.replyToken!,
@@ -186,6 +187,11 @@ async function handleSlip(event: webhook.MessageEvent, token: string) {
     );
   } catch (err) {
     console.error("[handleSlip error]", err);
+    try {
+      await replyText(event.replyToken!, "เกิดข้อผิดพลาด กรุณาลองใหม่", token);
+    } catch (replyErr) {
+      console.error("[handleSlip reply error]", replyErr);
+    }
   }
 }
 

@@ -7,13 +7,13 @@ const mocks = vi.hoisted(() => ({
   replyMessage: vi.fn(),
   getMessageContent: vi.fn(),
   fromChannelAccessToken: vi.fn(),
-  sendBillMessages: vi.fn(),
   db: {
     room: { findFirst: vi.fn() },
     tenant: { findFirst: vi.fn(), update: vi.fn() },
     bill: { findFirst: vi.fn(), update: vi.fn() },
     settings: { findUnique: vi.fn() },
     paymentSlip: { create: vi.fn() },
+    $transaction: vi.fn(),
   },
 }));
 
@@ -25,7 +25,6 @@ vi.mock("@line/bot-sdk", () => ({
 }));
 
 vi.mock("@/lib/db", () => ({ db: mocks.db }));
-vi.mock("@/lib/line", () => ({ sendBillMessages: mocks.sendBillMessages }));
 
 const source = { type: "user", userId: "U123" };
 
@@ -108,10 +107,10 @@ describe("Ticket 021 LINE webhook", () => {
       getMessageContent: mocks.getMessageContent,
     });
     mocks.replyMessage.mockResolvedValue(undefined);
-    mocks.sendBillMessages.mockResolvedValue(undefined);
     mocks.db.tenant.update.mockResolvedValue(undefined);
     mocks.db.bill.update.mockResolvedValue(undefined);
     mocks.db.paymentSlip.create.mockResolvedValue(undefined);
+    mocks.db.$transaction.mockImplementation((callback) => callback(mocks.db));
     mocks.db.settings.findUnique.mockResolvedValue({
       bankAccountName: "Rental Bills",
       bankAccountNumber: "123-4-56789-0",
@@ -140,6 +139,15 @@ describe("Ticket 021 LINE webhook", () => {
 
     expect(response.status).toBe(200);
     expectReply("ห้อง 101 ไม่มีผู้เช่าอยู่ กรุณาติดต่อเจ้าของห้อง");
+  });
+
+  it("reports when a room does not exist", async () => {
+    mocks.db.room.findFirst.mockResolvedValue(null);
+
+    const response = await POST(request([textEvent("999")]));
+
+    expect(response.status).toBe(200);
+    expectReply("ไม่พบห้อง 999 กรุณาส่งหมายเลขห้องของคุณ เช่น 101");
   });
 
   it("does not overwrite a different linked LINE user", async () => {
@@ -187,7 +195,6 @@ describe("Ticket 021 LINE webhook", () => {
     await POST(request([textEvent(" บิล ")]));
 
     expectReply("ไม่พบข้อมูลผู้เช่า กรุณาลงทะเบียนห้องก่อน");
-    expect(mocks.sendBillMessages).not.toHaveBeenCalled();
   });
 
   it("reports when a tenant has no SENT bill", async () => {
@@ -212,19 +219,25 @@ describe("Ticket 021 LINE webhook", () => {
       take: 1,
       include: { room: true },
     });
-    expect(mocks.sendBillMessages).toHaveBeenCalledWith("U123", [
-      {
-        type: "text",
-        text: expect.stringContaining("[ห้อง 101] บิลค่าน้ำ-ค่าไฟ เดือน 6/2026"),
-      },
-      {
-        type: "image",
-        originalContentUrl: "https://rental.test/api/bills/bill-1/qr",
-        previewImageUrl: "https://rental.test/api/bills/bill-1/qr",
-      },
-    ]);
-    expect(mocks.sendBillMessages.mock.calls[0][1][0].text).toContain(
+    expect(mocks.replyMessage).toHaveBeenCalledWith({
+      replyToken: "reply-token",
+      messages: [
+        {
+          type: "text",
+          text: expect.stringContaining("[ห้อง 101] บิลค่าน้ำ-ค่าไฟ เดือน 6/2026"),
+        },
+        {
+          type: "image",
+          originalContentUrl: "https://rental.test/api/bills/bill-1/qr",
+          previewImageUrl: "https://rental.test/api/bills/bill-1/qr",
+        },
+      ],
+    });
+    expect(mocks.replyMessage.mock.calls[0][0].messages[0].text).toContain(
       "📄 PDF: https://rental.test/bills/bill-1.pdf"
+    );
+    expect(mocks.replyMessage.mock.calls[0][0].messages[0].text).toContain(
+      "ค่าน้ำ: 5 หน่วย × 9 + 10 บาท = 55 บาท"
     );
   });
 
@@ -246,6 +259,7 @@ describe("Ticket 021 LINE webhook", () => {
 
     expect(response.status).toBe(200);
     expect(mocks.getMessageContent).toHaveBeenCalledWith("image-id");
+    expect(mocks.db.$transaction).toHaveBeenCalledOnce();
     expect(mocks.db.paymentSlip.create).toHaveBeenCalledWith({
       data: {
         billId: "bill-1",
@@ -270,6 +284,18 @@ describe("Ticket 021 LINE webhook", () => {
     expect(mocks.db.paymentSlip.create).not.toHaveBeenCalled();
   });
 
+  it("replies with a retry message when storing a slip fails", async () => {
+    mocks.db.tenant.findFirst.mockResolvedValue(tenant());
+    mocks.db.bill.findFirst.mockResolvedValue(bill());
+    mocks.getMessageContent.mockResolvedValue(Readable.from([Buffer.from("slip")]));
+    mocks.db.$transaction.mockRejectedValue(new Error("database unavailable"));
+
+    const response = await POST(request([imageEvent()]));
+
+    expect(response.status).toBe(200);
+    expectReply("เกิดข้อผิดพลาด กรุณาลองใหม่");
+  });
+
   it("returns 401 for an invalid signature", async () => {
     mocks.validateSignature.mockReturnValue(false);
 
@@ -284,6 +310,5 @@ describe("Ticket 021 LINE webhook", () => {
 
     expect(response.status).toBe(200);
     expect(mocks.replyMessage).not.toHaveBeenCalled();
-    expect(mocks.sendBillMessages).not.toHaveBeenCalled();
   });
 });
