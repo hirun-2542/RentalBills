@@ -18,7 +18,9 @@ const mocks = vi.hoisted(() => ({
     createFunction: vi.fn(),
   },
   renderBillPdfFromLayout: vi.fn(),
+  renderBillFilesFromLayout: vi.fn(),
   saveBillPdf: vi.fn(),
+  saveBillPreview: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -35,10 +37,12 @@ vi.mock("@/lib/inngest", () => ({
 
 vi.mock("@/lib/pdf-renderer", () => ({
   renderBillPdfFromLayout: mocks.renderBillPdfFromLayout,
+  renderBillFilesFromLayout: mocks.renderBillFilesFromLayout,
 }));
 
 vi.mock("@/lib/pdf-storage", () => ({
   saveBillPdf: mocks.saveBillPdf,
+  saveBillPreview: mocks.saveBillPreview,
 }));
 
 import { POST as preview } from "@/app/api/settings/template/preview/route";
@@ -81,8 +85,13 @@ describe("Ticket 019 PDF flow", () => {
       templatePreviewPath: "/uploads/template/preview.png",
     });
     mocks.db.bill.update.mockResolvedValue({});
+    mocks.renderBillFilesFromLayout.mockResolvedValue({
+      pdf: Buffer.from("%PDF"),
+      preview: Buffer.from("PNG"),
+    });
     mocks.renderBillPdfFromLayout.mockResolvedValue(Buffer.from("%PDF"));
     mocks.saveBillPdf.mockResolvedValue("/uploads/bills/bill-1.pdf");
+    mocks.saveBillPreview.mockResolvedValue("/uploads/bills/bill-1.png");
   });
 
   afterEach(async () => {
@@ -97,12 +106,13 @@ describe("Ticket 019 PDF flow", () => {
       pdfUrl: "/uploads/bills/bill-1.pdf",
     });
 
-    expect(mocks.renderBillPdfFromLayout).toHaveBeenCalledWith(
+    expect(mocks.renderBillFilesFromLayout).toHaveBeenCalledWith(
       { pageWidth: 794, pageHeight: 1123, items: [] },
       expect.objectContaining({ tenantName: "ภิญโญ สมชาย" }),
       expect.stringContaining("/public/uploads/template/preview.png")
     );
     expect(mocks.saveBillPdf).toHaveBeenCalledWith("bill-1", Buffer.from("%PDF"));
+    expect(mocks.saveBillPreview).toHaveBeenCalledWith("bill-1", Buffer.from("PNG"));
   });
 
   it("renders and saves a local PDF when template layout is set", async () => {
@@ -119,12 +129,13 @@ describe("Ticket 019 PDF flow", () => {
       pdfUrl: "/uploads/bills/bill-1.pdf",
     });
 
-    expect(mocks.renderBillPdfFromLayout).toHaveBeenCalledWith(
+    expect(mocks.renderBillFilesFromLayout).toHaveBeenCalledWith(
       layout,
       expect.objectContaining({ tenantName: "ภิญโญ สมชาย" }),
       expect.stringContaining("/public/uploads/template/preview.png")
     );
     expect(mocks.saveBillPdf).toHaveBeenCalledWith("bill-1", Buffer.from("%PDF"));
+    expect(mocks.saveBillPreview).toHaveBeenCalledWith("bill-1", Buffer.from("PNG"));
     expect(mocks.db.bill.update).toHaveBeenLastCalledWith({
       where: { id: "bill-1" },
       data: {
@@ -148,8 +159,9 @@ describe("Ticket 019 PDF flow", () => {
       "Template background preview is not configured"
     );
 
-    expect(mocks.renderBillPdfFromLayout).not.toHaveBeenCalled();
+    expect(mocks.renderBillFilesFromLayout).not.toHaveBeenCalled();
     expect(mocks.saveBillPdf).not.toHaveBeenCalled();
+    expect(mocks.saveBillPreview).not.toHaveBeenCalled();
     expect(mocks.db.bill.update).toHaveBeenLastCalledWith({
       where: { id: "bill-1" },
       data: {

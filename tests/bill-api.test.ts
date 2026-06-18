@@ -129,6 +129,10 @@ describe("Ticket 006 bill API routes", () => {
     mocks.db.$transaction.mockImplementation(async (operations) => operations);
     mocks.generatePromptPayQR.mockResolvedValue(Buffer.from("png"));
     mocks.sendBillMessages.mockResolvedValue(undefined);
+    mocks.generateBillPdfForBill.mockResolvedValue({
+      pdfUrl: "/uploads/bills/bill-1.pdf",
+    });
+    delete process.env.AUTH_URL;
     process.env.NEXTAUTH_URL = "https://rental.test";
   });
 
@@ -409,7 +413,7 @@ describe("Ticket 006 bill API routes", () => {
     });
   });
 
-  it("POST /api/bills/:id/generate queues PDF generation", async () => {
+  it("POST /api/bills/:id/generate starts local PDF generation outside production", async () => {
     mocks.db.bill.updateMany.mockResolvedValue({ count: 1 });
     mocks.inngest.send.mockResolvedValue(undefined);
 
@@ -430,10 +434,8 @@ describe("Ticket 006 bill API routes", () => {
         pdfUrl: null,
       },
     });
-    expect(mocks.inngest.send).toHaveBeenCalledWith({
-      name: "bill/pdf.generate",
-      data: { billId: "bill-1" },
-    });
+    expect(mocks.generateBillPdfForBill).toHaveBeenCalledWith("bill-1");
+    expect(mocks.inngest.send).not.toHaveBeenCalled();
   });
 
   it("POST /api/bills/:id/generate returns 409 while PDF is generating", async () => {
@@ -483,6 +485,7 @@ describe("Ticket 006 bill API routes", () => {
   });
 
   it("GET /api/bills/:id/qr returns a PromptPay QR PNG", async () => {
+    mocks.auth.mockResolvedValue(null);
     mocks.db.bill.findUnique.mockResolvedValue({
       total: decimal(3150),
     });
@@ -494,7 +497,7 @@ describe("Ticket 006 bill API routes", () => {
     await expect(response.text()).resolves.toBe("png");
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe("image/png");
-    expect(response.headers.get("Cache-Control")).toBe("private, max-age=300");
+    expect(response.headers.get("Cache-Control")).toBe("public, max-age=300");
     expect(mocks.db.bill.findUnique).toHaveBeenCalledWith({
       where: { id: "bill-1" },
       select: { total: true },
@@ -678,6 +681,11 @@ describe("Ticket 006 bill API routes", () => {
       }),
       {
         type: "image",
+        originalContentUrl: "https://rental.test/uploads/bills/bill-1.png",
+        previewImageUrl: "https://rental.test/uploads/bills/bill-1.png",
+      },
+      {
+        type: "image",
         originalContentUrl: "https://rental.test/api/bills/bill-1/qr",
         previewImageUrl: "https://rental.test/api/bills/bill-1/qr",
       },
@@ -693,6 +701,7 @@ describe("Ticket 006 bill API routes", () => {
   });
 
   it("POST /api/bills/:id/send returns 500 when NEXTAUTH_URL is missing", async () => {
+    delete process.env.AUTH_URL;
     process.env.NEXTAUTH_URL = "";
     mocks.db.bill.findUnique.mockResolvedValue({
       id: "bill-1",
@@ -718,7 +727,7 @@ describe("Ticket 006 bill API routes", () => {
     });
 
     await expect(response.json()).resolves.toEqual({
-      error: "NEXTAUTH_URL is not configured",
+      error: "AUTH_URL is not configured",
     });
     expect(response.status).toBe(500);
     expect(mocks.sendBillMessages).not.toHaveBeenCalled();
@@ -802,13 +811,6 @@ describe("Ticket 006 bill API routes", () => {
       "POST /api/bills/:id/send",
       () =>
         sendBill(new Request("http://localhost"), {
-          params: Promise.resolve({ id: "bill-1" }),
-        }),
-    ],
-    [
-      "GET /api/bills/:id/qr",
-      () =>
-        getBillQr(new Request("http://localhost"), {
           params: Promise.resolve({ id: "bill-1" }),
         }),
     ],

@@ -86,12 +86,25 @@ export async function renderBillPdfFromLayout(
   variables: Record<string, string>,
   backgroundPreviewPath: string
 ): Promise<Buffer> {
+  return (await renderBillFilesFromLayout(layout, variables, backgroundPreviewPath)).pdf;
+}
+
+export async function renderBillFilesFromLayout(
+  layout: TemplateLayout,
+  variables: Record<string, string>,
+  backgroundPreviewPath: string
+): Promise<{ pdf: Buffer; preview: Buffer }> {
   const browser = await puppeteer.launch({
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
 
   try {
     const page = await browser.newPage();
+    await page.setViewport({
+      width: Math.round(layout.pageWidth),
+      height: Math.round(layout.pageHeight),
+      deviceScaleFactor: 1,
+    });
     await page.setContent(
       await buildHtml(layout, variables, backgroundPreviewPath),
       {
@@ -104,8 +117,17 @@ export async function renderBillPdfFromLayout(
       printBackground: true,
       margin: { top: 0, right: 0, bottom: 0, left: 0 },
     });
+    const preview = await page.screenshot({
+      type: "png",
+      clip: {
+        x: 0,
+        y: 0,
+        width: layout.pageWidth,
+        height: layout.pageHeight,
+      },
+    });
 
-    return Buffer.from(pdf);
+    return { pdf: Buffer.from(pdf), preview: Buffer.from(preview) };
   } finally {
     await browser.close();
   }

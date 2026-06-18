@@ -2,6 +2,7 @@ import { validateSignature, LineBotClient } from "@line/bot-sdk";
 import type { messagingApi, webhook } from "@line/bot-sdk";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getBillPreviewUrl } from "@/lib/pdf-storage";
 
 function getConfig() {
   const channelSecret = process.env.LINE_CHANNEL_SECRET;
@@ -112,7 +113,6 @@ async function handleBillRequest(
     }
 
     const settings = await db.settings.findUnique({ where: { id: "singleton" } });
-    const pdfLine = bill.pdfUrl ? `\n📄 PDF: ${appUrl}${bill.pdfUrl}` : "";
     const text = `[ห้อง ${bill.room.number}] บิลค่าน้ำ-ค่าไฟ เดือน ${bill.month}/${bill.year}
 
 ค่าน้ำ: ${bill.waterUsage} หน่วย × ${Number(bill.waterRatePerUnit)} + ${Number(bill.waterCollectionFee)} บาท = ${Number(bill.waterTotal)} บาท
@@ -120,12 +120,17 @@ async function handleBillRequest(
 ค่าเช่า: ${Number(bill.rent)} บาท
 รวมทั้งหมด: ${Number(bill.total)} บาท
 
-ธนาคาร: ${settings?.bankAccountName ?? ""} เลขที่ ${settings?.bankAccountNumber ?? ""}${pdfLine}`;
+ธนาคาร: ${settings?.bankAccountName ?? ""} เลขที่ ${settings?.bankAccountNumber ?? ""}`;
     const messages: messagingApi.Message[] = [{ type: "text", text }];
 
     if (appUrl.startsWith("https://")) {
+      const previewUrl = `${appUrl}${getBillPreviewUrl(bill.id)}`;
       const qrUrl = `${appUrl}/api/bills/${bill.id}/qr`;
       messages.push({
+        type: "image",
+        originalContentUrl: previewUrl,
+        previewImageUrl: previewUrl,
+      }, {
         type: "image",
         originalContentUrl: qrUrl,
         previewImageUrl: qrUrl,

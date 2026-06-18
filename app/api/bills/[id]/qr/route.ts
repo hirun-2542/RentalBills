@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { generatePromptPayQR } from "@/lib/promptpay";
-import { requireSession, SETTINGS_ID } from "@/lib/api";
+import { SETTINGS_ID } from "@/lib/api";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -13,10 +13,6 @@ function toNumber(value: Prisma.Decimal | number) {
 }
 
 export async function GET(_request: Request, { params }: RouteContext) {
-  if (!(await requireSession())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   const { id } = await params;
   const bill = await db.bill.findUnique({
     where: { id },
@@ -46,7 +42,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
   return new Response(new Uint8Array(qr), {
     headers: {
-      "Cache-Control": "private, max-age=300",
+      "Cache-Control": "public, max-age=300",
       "Content-Type": "image/png",
     },
   });
