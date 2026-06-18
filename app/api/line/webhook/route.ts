@@ -2,6 +2,7 @@ import { validateSignature, LineBotClient } from "@line/bot-sdk";
 import type { messagingApi, webhook } from "@line/bot-sdk";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { createLineRegistrationToken } from "@/lib/line-registration";
 
 function getConfig() {
   const channelSecret = process.env.LINE_CHANNEL_SECRET;
@@ -21,7 +22,7 @@ async function handleFollow(event: webhook.FollowEvent, token: string) {
   try {
     await replyText(
       event.replyToken!,
-      "ยินดีต้อนรับ! 🏠 กรุณาส่งหมายเลขห้องของคุณ (เช่น 101) เพื่อลงทะเบียน LINE ของคุณกับระบบ",
+      "ยินดีต้อนรับ! 🏠 กรุณากดปุ่ม “ลงทะเบียน” ที่เมนูด้านล่างเพื่อเชื่อม LINE กับห้องพัก",
       token
     );
   } catch (err) {
@@ -92,6 +93,50 @@ async function handleRoomLink(
     await replyText(event.replyToken!, `✅ ลิงก์ห้อง ${roomNumber} (${tenant.name}) เรียบร้อยแล้ว`, token);
   } catch (err) {
     console.error("[handleRoomLink error]", err);
+  }
+}
+
+async function handleRegistrationLink(
+  event: webhook.MessageEvent,
+  token: string,
+  appUrl: string
+) {
+  try {
+    const userId = event.source?.userId;
+    if (!userId) return;
+    if (!appUrl.startsWith("https://")) {
+      await replyText(event.replyToken!, "ระบบลงทะเบียนยังไม่พร้อม กรุณาติดต่อเจ้าของห้อง", token);
+      return;
+    }
+
+    const registrationUrl = `${appUrl}/line/register?token=${encodeURIComponent(
+      createLineRegistrationToken(userId)
+    )}`;
+    const client = LineBotClient.fromChannelAccessToken({
+      channelAccessToken: token,
+    });
+    await client.replyMessage({
+      replyToken: event.replyToken!,
+      messages: [
+        {
+          type: "template",
+          altText: "ลงทะเบียนผู้เข้าพัก",
+          template: {
+            type: "buttons",
+            text: "กรอกชื่อ เบอร์โทร และเลขห้องที่เข้าพัก",
+            actions: [
+              {
+                type: "uri",
+                label: "เปิดแบบฟอร์มลงทะเบียน",
+                uri: registrationUrl,
+              },
+            ],
+          },
+        },
+      ],
+    });
+  } catch (err) {
+    console.error("[handleRegistrationLink error]", err);
   }
 }
 
@@ -263,7 +308,7 @@ async function handleComplaint(
 
     await replyText(
       event.replyToken!,
-      `✅ รับเรื่องร้องเรียนของห้อง ${tenant.room.number} แล้ว เจ้าของห้องจะตรวจสอบและติดต่อกลับ`,
+      `✅ รับเรื่องร้องเรียนของห้อง ${tenant.room.number} แล้ว\n\nรายละเอียด: ${detail}\n\nเจ้าของห้องจะเห็นข้อความนี้ใน LINE OA และติดต่อกลับ`,
       token
     );
   } catch (err) {
@@ -352,6 +397,8 @@ export async function POST(request: Request) {
             const command = text.toLowerCase();
             if (command === "บิล") {
               await handleBillRequest(msgEvent, channelAccessToken, appUrl);
+            } else if (command === "ลงทะเบียน") {
+              await handleRegistrationLink(msgEvent, channelAccessToken, appUrl);
             } else if (command.startsWith("ลงทะเบียน:")) {
               await handleRegistration(msgEvent, channelAccessToken, text);
             } else if (command.startsWith("ร้องเรียน:")) {

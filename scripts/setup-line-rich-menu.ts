@@ -16,13 +16,7 @@ const menu: messagingApi.RichMenuRequest = {
     },
     {
       bounds: { x: 833, y: 0, width: 834, height: 843 },
-      action: {
-        type: "postback",
-        label: "ลงทะเบียน",
-        data: "action=register",
-        inputOption: "openKeyboard",
-        fillInText: "ลงทะเบียน: ชื่อ, เบอร์โทร, ห้องพัก",
-      },
+      action: { type: "message", label: "ลงทะเบียน", text: "ลงทะเบียน" },
     },
     {
       bounds: { x: 1667, y: 0, width: 833, height: 843 },
