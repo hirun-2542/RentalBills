@@ -162,6 +162,19 @@ describe("Ticket 021 LINE webhook", () => {
     expectReply("ห้อง 101 มี LINE อื่นลิงก์อยู่แล้ว กรุณาติดต่อเจ้าของห้อง");
   });
 
+  it("does not let one LINE user link another room", async () => {
+    mocks.db.tenant.findFirst.mockResolvedValue({
+      ...tenant(),
+      room: { id: "room-1", number: "101" },
+    });
+
+    await POST(request([textEvent("102")]));
+
+    expect(mocks.db.room.findFirst).not.toHaveBeenCalled();
+    expect(mocks.db.tenant.update).not.toHaveBeenCalled();
+    expectReply("LINE ของคุณลิงก์กับห้อง 101 อยู่แล้ว กรุณาติดต่อเจ้าของห้อง");
+  });
+
   it("reports when the same LINE user is already linked", async () => {
     mocks.db.room.findFirst.mockResolvedValue({
       id: "room-1",
