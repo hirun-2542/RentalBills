@@ -41,6 +41,19 @@ async function handleRoomLink(
     const roomNumber = event.message.text.trim();
     const userId = event.source.userId;
 
+    const linkedTenant = await db.tenant.findFirst({
+      where: { lineUserId: userId, active: true },
+      include: { room: true },
+    });
+    if (linkedTenant && linkedTenant.room.number !== roomNumber) {
+      await replyText(
+        event.replyToken!,
+        `LINE ของคุณลิงก์กับห้อง ${linkedTenant.room.number} อยู่แล้ว กรุณาติดต่อเจ้าของห้อง`,
+        token
+      );
+      return;
+    }
+
     const room = await db.room.findFirst({
       where: { number: roomNumber },
       include: {
