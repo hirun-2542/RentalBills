@@ -52,7 +52,6 @@ const mocks = vi.hoisted(() => ({
       upsert: vi.fn(),
     },
   },
-  renderBillPdf: vi.fn(),
   renderBillPdfFromLayout: vi.fn(),
 }));
 
@@ -62,10 +61,6 @@ vi.mock("@/lib/auth", () => ({
 
 vi.mock("@/lib/db", () => ({
   db: mocks.db,
-}));
-
-vi.mock("@/lib/qorstack", () => ({
-  renderBillPdf: mocks.renderBillPdf,
 }));
 
 vi.mock("@/lib/pdf-renderer", () => ({
@@ -85,7 +80,6 @@ describe("Ticket 020 template layout API", () => {
     vi.clearAllMocks();
     vi.unstubAllGlobals();
     mocks.auth.mockResolvedValue({ user: { name: "Admin" } });
-    mocks.renderBillPdf.mockResolvedValue("https://example.test/preview.pdf");
     mocks.renderBillPdfFromLayout.mockResolvedValue(Buffer.from("%PDF-layout"));
     await rm(previewPath, { force: true });
   });
@@ -271,7 +265,6 @@ describe("Ticket 020 template layout API", () => {
       previewUrl: "/uploads/template/preview-bill.pdf",
     });
     expect(response.status).toBe(200);
-    expect(mocks.renderBillPdf).not.toHaveBeenCalled();
     expect(mocks.renderBillPdfFromLayout).toHaveBeenCalledWith(
       { pageWidth: 595, pageHeight: 842, items: [] },
       expect.objectContaining({ tenantName: "ภิญโญ สมชาย" }),
@@ -287,7 +280,6 @@ describe("Ticket 020 template layout API", () => {
     await expect(response.json()).resolves.toEqual({ error: "Unauthorized" });
     expect(response.status).toBe(401);
     expect(mocks.renderBillPdfFromLayout).not.toHaveBeenCalled();
-    expect(mocks.renderBillPdf).not.toHaveBeenCalled();
   });
 
   it("POST returns 400 when layout has no background preview", async () => {
@@ -305,50 +297,20 @@ describe("Ticket 020 template layout API", () => {
     expect(mocks.renderBillPdfFromLayout).not.toHaveBeenCalled();
   });
 
-  it("POST falls back to renderBillPdf and saves the downloaded PDF", async () => {
+  it("POST returns 400 when no background preview path is set", async () => {
     mocks.db.settings.findUnique.mockResolvedValue({ templateLayout: null });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        arrayBuffer: async () =>
-          new TextEncoder().encode("%PDF-fallback").buffer,
-      })
-    );
 
     const response = await POST();
 
     await expect(response.json()).resolves.toEqual({
-      previewUrl: "/uploads/template/preview-bill.pdf",
+      error: "Template background is required before preview",
     });
-    expect(response.status).toBe(200);
-    expect(mocks.renderBillPdf).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantName: "ภิญโญ สมชาย" })
-    );
-    await expect(readFile(previewPath, "utf8")).resolves.toBe("%PDF-fallback");
+    expect(response.status).toBe(400);
+    expect(mocks.renderBillPdfFromLayout).not.toHaveBeenCalled();
   });
 
-  it("POST returns 502 when fallback PDF download fails", async () => {
-    mocks.db.settings.findUnique.mockResolvedValue({ templateLayout: null });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: false,
-        arrayBuffer: vi.fn(),
-      })
-    );
-
-    const response = await POST();
-
-    await expect(response.json()).resolves.toEqual({
-      error: "Preview PDF download failed",
-    });
-    expect(response.status).toBe(502);
-  });
-
-  it("POST returns 400 when no background exists and Qorstack is unavailable", async () => {
+  it("POST returns 400 when settings do not exist", async () => {
     mocks.db.settings.findUnique.mockResolvedValue(null);
-    mocks.renderBillPdf.mockRejectedValue(new Error("Qorstack is not configured"));
 
     const response = await POST();
 

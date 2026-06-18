@@ -72,7 +72,7 @@ export async function convertToPreviewPng(
 
 Implement Ticket 017 only.
 
-Check `docs/qorstack-api.md` (from Ticket 014) to determine whether to use Qorstack or LibreOffice CLI for DOCX/PDF → PNG conversion.
+Use LibreOffice CLI for DOCX/PDF → PNG conversion.
 
 Create:
 

@@ -2,7 +2,7 @@
 
 ## Goal
 
-Generate PDF จาก canvas layout JSON + background template + bill data พร้อมรองรับภาษาไทย โดยมี fallback ไปใช้ Qorstack Word template เดิมถ้ายังไม่มี custom layout
+Generate PDF จาก canvas layout JSON + background template + bill data พร้อมรองรับภาษาไทย
 
 ## Scope
 
@@ -24,24 +24,11 @@ Out of scope:
 
 ## Dependencies
 
-- **Ticket 014** (Qorstack spike) — กำหนด rendering path
 - **Ticket 015** (local PDF storage)
 - **Ticket 016** (DB schema)
 
 ## Rendering Path
 
-ตรวจสอบ `docs/qorstack-api.md` จาก Ticket 014 แล้วเลือก:
-
-### Path A — Qorstack มี HTML → PDF endpoint
-```
-layout JSON
-  → HTML string (positioned CSS)
-  → POST {QORSTACK_API_URL}/render/html
-  → PDF buffer
-  → saveBillPdf(billId, buffer)
-```
-
-### Path B — Qorstack เป็น Word template เท่านั้น
 ```
 layout JSON
   → HTML string (positioned CSS)
@@ -50,7 +37,7 @@ layout JSON
   → saveBillPdf(billId, buffer)
 ```
 
-## HTML Template Pattern (ทั้งสอง path)
+## HTML Template Pattern
 
 ```html
 <!DOCTYPE html>
@@ -109,25 +96,14 @@ export async function renderBillPdfFromLayout(
 ): Promise<Buffer>
 ```
 
-## Fallback logic ใน inngest/generate-bill-pdf.ts
+## Logic ใน inngest/generate-bill-pdf.ts
 
 ```ts
 const settings = await db.settings.findUnique({ where: { id: "singleton" } })
-
-if (!settings?.templateLayout) {
-  // fallback: ใช้ Qorstack Word template เดิม (ไม่เปลี่ยน behavior)
-  const pdfUrl = await renderBillPdf(variables)
-  await db.bill.update({ where: { id: billId }, data: { pdfUrl, pdfStatus: "DONE" } })
-} else {
-  // ใช้ canvas layout renderer
-  const buffer = await renderBillPdfFromLayout(
-    settings.templateLayout as TemplateLayout,
-    variables,
-    path.join(process.cwd(), "public", settings.templatePreviewPath!)
-  )
-  const pdfUrl = await saveBillPdf(billId, buffer)
-  await db.bill.update({ where: { id: billId }, data: { pdfUrl, pdfStatus: "DONE" } })
-}
+const layout = (settings?.templateLayout as TemplateLayout | null) ?? { pageWidth: 794, pageHeight: 1123, items: [] }
+const buffer = await renderBillPdfFromLayout(layout, variables, backgroundPath)
+const pdfUrl = await saveBillPdf(billId, buffer)
+await db.bill.update({ where: { id: billId }, data: { pdfUrl, pdfStatus: "DONE" } })
 ```
 
 ## Thai font requirement
@@ -139,7 +115,6 @@ if (!settings?.templateLayout) {
 ## Tests required
 
 - `renderBillPdfFromLayout` คืน `Buffer` ที่ไม่ว่างเปล่า
-- ถ้า `settings.templateLayout === null` → เรียก `renderBillPdf` (Qorstack) เหมือนเดิม
 - ถ้ามี layout → เรียก `renderBillPdfFromLayout` และ save ไฟล์ local
 - Preview endpoint คืน `{ previewUrl }` ที่ชี้ไปที่ local PDF
 
@@ -147,23 +122,19 @@ if (!settings?.templateLayout) {
 
 - [ ] ⚠️ CRITICAL: ชื่อภาษาไทย เช่น "ภิญโญ" และ "กล้วยหอม" แสดงถูกต้องใน PDF (สระบน/วรรณยุกต์ไม่ขยับ)
 - [ ] ตำแหน่ง item ตรงกับที่วางใน canvas editor
-- [ ] ถ้าไม่มี `templateLayout` → Qorstack render ทำงาน 100% เหมือนเดิม
 - [ ] PDF ถูกเก็บ local และเข้าถึงได้ผ่าน HTTP
 
 ## Prompt for Codex
 
 Implement Ticket 019 only.
 
-First, check `docs/qorstack-api.md` (Ticket 014) to determine whether to use Qorstack HTML endpoint (Path A) or Puppeteer (Path B) for rendering.
-
 Create `lib/pdf-renderer.ts` exporting `renderBillPdfFromLayout(layout, variables, backgroundPreviewPath): Promise<Buffer>`. This function:
 1. Builds an HTML string with `position: absolute` CSS for each item in `layout.items`, placing variable values or static text at their (x, y) coordinates
 2. Uses `font-family: 'Sarabun', 'Noto Sans Thai', sans-serif` for Thai text support
-3. Uses Path A (Qorstack HTML endpoint) or Path B (Puppeteer) based on Ticket 014 findings
+3. Uses Puppeteer for HTML → PDF conversion
 
-Update `inngest/generate-bill-pdf.ts` to add fallback logic:
-- If `settings.templateLayout` is null → use existing `renderBillPdf()` (Qorstack Word template, no change)
-- If `settings.templateLayout` is set → use `renderBillPdfFromLayout()`, then `saveBillPdf()` from Ticket 015, update `bill.pdfUrl` with the local URL
+Update `inngest/generate-bill-pdf.ts`:
+- Use `renderBillPdfFromLayout()`, then `saveBillPdf()` from Ticket 015, update `bill.pdfUrl` with the local URL
 
 Create `app/api/settings/template/preview/route.ts` (POST) that renders a preview PDF using sample Thai data (tenantName: "ภิญโญ สมชาย", etc.) and returns `{ previewUrl }`.
 

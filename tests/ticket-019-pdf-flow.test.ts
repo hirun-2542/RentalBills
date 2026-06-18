@@ -17,7 +17,6 @@ const mocks = vi.hoisted(() => ({
   inngest: {
     createFunction: vi.fn(),
   },
-  renderBillPdf: vi.fn(),
   renderBillPdfFromLayout: vi.fn(),
   saveBillPdf: vi.fn(),
 }));
@@ -32,10 +31,6 @@ vi.mock("@/lib/db", () => ({
 
 vi.mock("@/lib/inngest", () => ({
   inngest: mocks.inngest,
-}));
-
-vi.mock("@/lib/qorstack", () => ({
-  renderBillPdf: mocks.renderBillPdf,
 }));
 
 vi.mock("@/lib/pdf-renderer", () => ({
@@ -86,7 +81,6 @@ describe("Ticket 019 PDF flow", () => {
       templatePreviewPath: "/uploads/template/preview.png",
     });
     mocks.db.bill.update.mockResolvedValue({});
-    mocks.renderBillPdf.mockResolvedValue("https://qorstack.test/bill.pdf");
     mocks.renderBillPdfFromLayout.mockResolvedValue(Buffer.from("%PDF"));
     mocks.saveBillPdf.mockResolvedValue("/uploads/bills/bill-1.pdf");
   });
@@ -98,14 +92,17 @@ describe("Ticket 019 PDF flow", () => {
     );
   });
 
-  it("keeps the Qorstack Word fallback when no template layout is set", async () => {
+  it("uses empty layout when no template layout is set", async () => {
     await expect(generateBillPdfForBill("bill-1")).resolves.toEqual({
-      pdfUrl: "https://qorstack.test/bill.pdf",
+      pdfUrl: "/uploads/bills/bill-1.pdf",
     });
 
-    expect(mocks.renderBillPdf).toHaveBeenCalledOnce();
-    expect(mocks.renderBillPdfFromLayout).not.toHaveBeenCalled();
-    expect(mocks.saveBillPdf).not.toHaveBeenCalled();
+    expect(mocks.renderBillPdfFromLayout).toHaveBeenCalledWith(
+      { pageWidth: 794, pageHeight: 1123, items: [] },
+      expect.objectContaining({ tenantName: "ภิญโญ สมชาย" }),
+      expect.stringContaining("/public/uploads/template/preview.png")
+    );
+    expect(mocks.saveBillPdf).toHaveBeenCalledWith("bill-1", Buffer.from("%PDF"));
   });
 
   it("renders and saves a local PDF when template layout is set", async () => {
@@ -122,7 +119,6 @@ describe("Ticket 019 PDF flow", () => {
       pdfUrl: "/uploads/bills/bill-1.pdf",
     });
 
-    expect(mocks.renderBillPdf).not.toHaveBeenCalled();
     expect(mocks.renderBillPdfFromLayout).toHaveBeenCalledWith(
       layout,
       expect.objectContaining({ tenantName: "ภิญโญ สมชาย" }),
@@ -139,7 +135,7 @@ describe("Ticket 019 PDF flow", () => {
     });
   });
 
-  it("falls back to Qorstack when layout has no background preview path", async () => {
+  it("throws when layout has no background preview path", async () => {
     mocks.db.settings.findUnique.mockResolvedValue({
       bankAccountName: "กล้วยหอม มีสุข",
       bankAccountNumber: "123-4-56789-0",
@@ -148,13 +144,19 @@ describe("Ticket 019 PDF flow", () => {
       templatePreviewPath: null,
     });
 
-    await expect(generateBillPdfForBill("bill-1")).resolves.toEqual({
-      pdfUrl: "https://qorstack.test/bill.pdf",
-    });
+    await expect(generateBillPdfForBill("bill-1")).rejects.toThrow(
+      "Template background preview is not configured"
+    );
 
-    expect(mocks.renderBillPdf).toHaveBeenCalledOnce();
     expect(mocks.renderBillPdfFromLayout).not.toHaveBeenCalled();
     expect(mocks.saveBillPdf).not.toHaveBeenCalled();
+    expect(mocks.db.bill.update).toHaveBeenLastCalledWith({
+      where: { id: "bill-1" },
+      data: {
+        pdfStatus: PdfStatus.FAILED,
+        pdfError: "Template background preview is not configured",
+      },
+    });
   });
 
   it("preview endpoint returns 401 when unauthenticated", async () => {
@@ -164,7 +166,6 @@ describe("Ticket 019 PDF flow", () => {
 
     await expect(response.json()).resolves.toEqual({ error: "Unauthorized" });
     expect(response.status).toBe(401);
-    expect(mocks.renderBillPdf).not.toHaveBeenCalled();
     expect(mocks.renderBillPdfFromLayout).not.toHaveBeenCalled();
   });
 

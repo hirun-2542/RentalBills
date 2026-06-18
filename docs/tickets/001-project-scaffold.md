@@ -2,7 +2,7 @@
 
 ## Goal
 
-ตั้งโครงสร้างโปรเจกต์ Next.js 15 + TypeScript + Tailwind CSS + shadcn/ui + Prisma พร้อม local dev Docker Compose สำหรับ PostgreSQL และ qorstack-report
+ตั้งโครงสร้างโปรเจกต์ Next.js 15 + TypeScript + Tailwind CSS + shadcn/ui + Prisma พร้อม local dev Docker Compose สำหรับ PostgreSQL
 
 ## Scope
 
@@ -10,7 +10,7 @@ In scope:
 - สร้างโปรเจกต์ด้วย `create-next-app` + TypeScript strict mode
 - ติดตั้ง Tailwind CSS + shadcn/ui
 - ติดตั้ง Prisma + config เชื่อม PostgreSQL ผ่าน `DATABASE_URL`
-- สร้าง `docker-compose.dev.yml` สำหรับ local dev (postgres + qorstack-report)
+- สร้าง `docker-compose.dev.yml` สำหรับ local dev (postgres)
 - สร้าง `.env.example` ครบทุก env var
 - สร้าง `lib/db.ts` — Prisma client singleton
 - สร้าง `app/(dashboard)/layout.tsx` — sidebar + header shell (placeholder)
@@ -53,7 +53,6 @@ Out of scope:
    ```
 6. สร้าง `docker-compose.dev.yml`:
    - service `postgres`: image `postgres:16-alpine`, port `5432`, volume
-   - service `qorstack`: image `qorstack/report:latest` (หรือ placeholder image), port `3001`
 7. สร้าง `.env.example`:
    ```
    DATABASE_URL=postgresql://postgres:postgres@localhost:5432/rentalbills
@@ -63,8 +62,6 @@ Out of scope:
    ADMIN_PASSWORD_HASH=
    LINE_CHANNEL_ACCESS_TOKEN=
    LINE_CHANNEL_SECRET=
-   QORSTACK_API_URL=http://localhost:3001
-   QORSTACK_API_KEY=
    INNGEST_SIGNING_KEY=
    INNGEST_EVENT_KEY=
    ```
@@ -97,10 +94,9 @@ Set up a Next.js 15 (App Router) + TypeScript project in the current directory w
 1. Tailwind CSS + shadcn/ui (style: Default, base color: Slate)
 2. Prisma ORM — datasource pointing to `DATABASE_URL` env var (PostgreSQL)
 3. `lib/db.ts` as a Prisma client singleton (global pattern for Next.js dev mode)
-4. `docker-compose.dev.yml` with two services:
+4. `docker-compose.dev.yml` with one service:
    - `postgres`: image postgres:16-alpine, port 5432:5432, volume for data persistence, env POSTGRES_DB=rentalbills POSTGRES_USER=postgres POSTGRES_PASSWORD=postgres
-   - `qorstack`: image qorstack/report:latest, port 3001:3000 (use placeholder if image unknown)
-5. `.env.example` with these keys (empty values): DATABASE_URL, NEXTAUTH_SECRET, NEXTAUTH_URL, ADMIN_USERNAME, ADMIN_PASSWORD_HASH, LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, QORSTACK_API_URL, QORSTACK_API_KEY, INNGEST_SIGNING_KEY, INNGEST_EVENT_KEY
+5. `.env.example` with these keys (empty values): DATABASE_URL, NEXTAUTH_SECRET, NEXTAUTH_URL, ADMIN_USERNAME, ADMIN_PASSWORD_HASH, LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, INNGEST_SIGNING_KEY, INNGEST_EVENT_KEY
 6. `app/(dashboard)/layout.tsx` — sidebar with nav links (Dashboard /, Rooms /rooms, Bills /bills, History /history, Settings /settings) and a top header bar. Use shadcn/ui components.
 7. `app/(dashboard)/page.tsx` — placeholder `<h1>Dashboard</h1>`
 8. `app/(auth)/login/page.tsx` — placeholder `<h1>Login</h1>`
