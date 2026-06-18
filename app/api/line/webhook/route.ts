@@ -2,7 +2,6 @@ import { validateSignature, LineBotClient } from "@line/bot-sdk";
 import type { messagingApi, webhook } from "@line/bot-sdk";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getBillPreviewUrl } from "@/lib/pdf-storage";
 
 function getConfig() {
   const channelSecret = process.env.LINE_CHANNEL_SECRET;
@@ -96,6 +95,83 @@ async function handleRoomLink(
   }
 }
 
+async function handleRegistration(
+  event: webhook.MessageEvent,
+  token: string,
+  text: string
+) {
+  try {
+    const userId = event.source?.userId;
+    if (!userId) return;
+
+    const [name = "", phoneInput = "", roomNumber = "", ...extra] = text
+      .slice("ลงทะเบียน:".length)
+      .split(",")
+      .map((value) => value.trim());
+    const phone = phoneInput.replace(/[\s-]/g, "");
+
+    if (!name || !/^0\d{8,9}$/.test(phone) || !roomNumber || extra.length) {
+      await replyText(
+        event.replyToken!,
+        "กรุณากรอกข้อมูลรูปแบบ ลงทะเบียน: ชื่อ, เบอร์โทร, ห้องพัก เช่น ลงทะเบียน: สมชาย ใจดี, 0812345678, 101",
+        token
+      );
+      return;
+    }
+
+    const linkedTenant = await db.tenant.findFirst({
+      where: { lineUserId: userId, active: true },
+      include: { room: true },
+    });
+    if (linkedTenant && linkedTenant.room.number !== roomNumber) {
+      await replyText(
+        event.replyToken!,
+        `LINE ของคุณลงทะเบียนกับห้อง ${linkedTenant.room.number} อยู่แล้ว กรุณาติดต่อเจ้าของห้อง`,
+        token
+      );
+      return;
+    }
+
+    const room = await db.room.findFirst({
+      where: { number: roomNumber },
+      include: { tenants: { where: { active: true }, take: 1 } },
+    });
+    if (!room) {
+      await replyText(event.replyToken!, `ไม่พบห้อง ${roomNumber} กรุณาตรวจสอบหมายเลขห้อง`, token);
+      return;
+    }
+
+    const tenant = room.tenants[0];
+    if (tenant?.lineUserId && tenant.lineUserId !== userId) {
+      await replyText(
+        event.replyToken!,
+        `ห้อง ${roomNumber} มี LINE อื่นลงทะเบียนอยู่แล้ว กรุณาติดต่อเจ้าของห้อง`,
+        token
+      );
+      return;
+    }
+
+    if (tenant) {
+      await db.tenant.update({
+        where: { id: tenant.id },
+        data: { name, phone, lineUserId: userId },
+      });
+    } else {
+      await db.tenant.create({
+        data: { roomId: room.id, name, phone, lineUserId: userId },
+      });
+    }
+
+    await replyText(
+      event.replyToken!,
+      `✅ ลงทะเบียน ${name} ห้อง ${roomNumber} เรียบร้อยแล้ว`,
+      token
+    );
+  } catch (err) {
+    console.error("[handleRegistration error]", err);
+  }
+}
+
 async function handleBillRequest(
   event: webhook.MessageEvent,
   token: string,
@@ -136,13 +212,17 @@ async function handleBillRequest(
 ธนาคาร: ${settings?.bankAccountName ?? ""} เลขที่ ${settings?.bankAccountNumber ?? ""}`;
     const messages: messagingApi.Message[] = [{ type: "text", text }];
 
-    if (appUrl.startsWith("https://")) {
-      const previewUrl = `${appUrl}${getBillPreviewUrl(bill.id)}`;
+    if (appUrl.startsWith("https://") && bill.pdfUrl) {
+      const pdfUrl = `${appUrl}${bill.pdfUrl}`;
       const qrUrl = `${appUrl}/api/bills/${bill.id}/qr`;
       messages.push({
-        type: "image",
-        originalContentUrl: previewUrl,
-        previewImageUrl: previewUrl,
+        type: "template",
+        altText: `ดูบิล PDF ห้อง ${bill.room.number}`,
+        template: {
+          type: "buttons",
+          text: `บิลห้อง ${bill.room.number} เดือน ${bill.month}/${bill.year}`,
+          actions: [{ type: "uri", label: "ดูบิล PDF", uri: pdfUrl }],
+        },
       }, {
         type: "image",
         originalContentUrl: qrUrl,
@@ -268,10 +348,13 @@ export async function POST(request: Request) {
         } else if (event.type === "message") {
           const msgEvent = event as webhook.MessageEvent;
           if (msgEvent.message.type === "text") {
-            const text = (msgEvent.message as webhook.TextMessageContent).text.trim().toLowerCase();
-            if (text === "บิล") {
+            const text = (msgEvent.message as webhook.TextMessageContent).text.trim();
+            const command = text.toLowerCase();
+            if (command === "บิล") {
               await handleBillRequest(msgEvent, channelAccessToken, appUrl);
-            } else if (text.startsWith("ร้องเรียน:")) {
+            } else if (command.startsWith("ลงทะเบียน:")) {
+              await handleRegistration(msgEvent, channelAccessToken, text);
+            } else if (command.startsWith("ร้องเรียน:")) {
               await handleComplaint(msgEvent, channelAccessToken, text);
             } else {
               await handleRoomLink(msgEvent, channelAccessToken);
