@@ -1,7 +1,7 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { renderBillPdfFromLayout } from "@/lib/pdf-renderer";
+import { renderBillFilesFromLayout } from "@/lib/pdf-renderer";
 import type { TemplateLayout } from "@/lib/template-editor";
 
 const tempDir = path.join(process.cwd(), "tmp-ticket-019");
@@ -23,7 +23,7 @@ describe("Ticket 019 PDF renderer", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("returns a non-empty PDF buffer from layout data", async () => {
+  it("returns PDF and PNG preview buffers from layout data", async () => {
     const layout: TemplateLayout = {
       pageWidth: 595,
       pageHeight: 842,
@@ -57,13 +57,15 @@ describe("Ticket 019 PDF renderer", () => {
       ],
     };
 
-    const buffer = await renderBillPdfFromLayout(
+    const files = await renderBillFilesFromLayout(
       layout,
       { tenantName: "ภิญโญ สมชาย" },
       backgroundPath
     );
 
-    expect(buffer.length).toBeGreaterThan(1000);
-    expect(buffer.subarray(0, 4).toString()).toBe("%PDF");
+    expect(files.pdf.length).toBeGreaterThan(1000);
+    expect(files.pdf.subarray(0, 4).toString()).toBe("%PDF");
+    expect(files.preview.length).toBeGreaterThan(1000);
+    expect(files.preview.subarray(1, 4).toString()).toBe("PNG");
   });
 });

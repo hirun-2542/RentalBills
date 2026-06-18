@@ -16,6 +16,12 @@ export function getBillPdfUrl(billId: string): string {
   return `/uploads/bills/${billId}.pdf`;
 }
 
+export function getBillPreviewUrl(billId: string): string {
+  assertValidBillId(billId);
+
+  return `/uploads/bills/${billId}.png`;
+}
+
 export async function saveBillPdf(
   billId: string,
   buffer: Buffer
@@ -28,14 +34,28 @@ export async function saveBillPdf(
   return getBillPdfUrl(billId);
 }
 
+export async function saveBillPreview(
+  billId: string,
+  buffer: Buffer
+): Promise<string> {
+  assertValidBillId(billId);
+
+  await fs.mkdir(billsUploadDir, { recursive: true });
+  await fs.writeFile(path.join(billsUploadDir, `${billId}.png`), buffer);
+
+  return getBillPreviewUrl(billId);
+}
+
 export async function deleteBillPdf(billId: string): Promise<void> {
   assertValidBillId(billId);
 
-  try {
-    await fs.unlink(path.join(billsUploadDir, `${billId}.pdf`));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw error;
+  for (const extension of ["pdf", "png"]) {
+    try {
+      await fs.unlink(path.join(billsUploadDir, `${billId}.${extension}`));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
     }
   }
 }

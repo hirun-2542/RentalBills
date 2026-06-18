@@ -2,8 +2,8 @@ import path from "node:path";
 import { PdfStatus } from "@prisma/client";
 import { inngest } from "@/lib/inngest";
 import { db } from "@/lib/db";
-import { saveBillPdf } from "@/lib/pdf-storage";
-import { renderBillPdfFromLayout } from "@/lib/pdf-renderer";
+import { saveBillPdf, saveBillPreview } from "@/lib/pdf-storage";
+import { renderBillFilesFromLayout } from "@/lib/pdf-renderer";
 import type { TemplateLayout } from "@/lib/template-editor";
 
 
@@ -60,14 +60,16 @@ export async function generateBillPdfForBill(billId: string) {
       throw new Error("Template background preview is not configured");
     }
     const layout = (settings.templateLayout as TemplateLayout | null) ?? { pageWidth: 794, pageHeight: 1123, items: [] };
+    const files = await renderBillFilesFromLayout(
+      layout,
+      variables,
+      path.join(process.cwd(), "public", backgroundPreviewPath)
+    );
     const pdfUrl = await saveBillPdf(
       billId,
-      await renderBillPdfFromLayout(
-        layout,
-        variables,
-        path.join(process.cwd(), "public", backgroundPreviewPath)
-      )
+      files.pdf
     );
+    await saveBillPreview(billId, files.preview);
 
     await db.bill.update({
       where: { id: billId },

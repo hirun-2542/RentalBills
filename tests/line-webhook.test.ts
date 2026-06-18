@@ -206,7 +206,7 @@ describe("Ticket 021 LINE webhook", () => {
     expectReply("ไม่พบบิลที่รอชำระ");
   });
 
-  it("sends bill text and QR image for an HTTPS app URL", async () => {
+  it("sends bill summary, bill preview, and PromptPay QR", async () => {
     mocks.db.tenant.findFirst.mockResolvedValue(tenant());
     mocks.db.bill.findFirst.mockResolvedValue(bill());
 
@@ -228,14 +228,17 @@ describe("Ticket 021 LINE webhook", () => {
         },
         {
           type: "image",
+          originalContentUrl: "https://rental.test/uploads/bills/bill-1.png",
+          previewImageUrl: "https://rental.test/uploads/bills/bill-1.png",
+        },
+        {
+          type: "image",
           originalContentUrl: "https://rental.test/api/bills/bill-1/qr",
           previewImageUrl: "https://rental.test/api/bills/bill-1/qr",
         },
       ],
     });
-    expect(mocks.replyMessage.mock.calls[0][0].messages[0].text).toContain(
-      "📄 PDF: https://rental.test/bills/bill-1.pdf"
-    );
+    expect(mocks.replyMessage.mock.calls[0][0].messages[0].text).not.toContain("PDF:");
     expect(mocks.replyMessage.mock.calls[0][0].messages[0].text).toContain(
       "ค่าน้ำ: 5 หน่วย × 9 + 10 บาท = 55 บาท"
     );
