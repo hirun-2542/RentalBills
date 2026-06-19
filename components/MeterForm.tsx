@@ -13,13 +13,21 @@ type MeterFormProps = {
   room: MeterRoom;
   index: number;
   onValidityChange?: (index: number, hasError: boolean) => void;
+  prevWater?: number;
+  prevElec?: number;
 };
 
-export function MeterForm({ room, index, onValidityChange }: MeterFormProps) {
+export function MeterForm({
+  room,
+  index,
+  onValidityChange,
+  prevWater,
+  prevElec,
+}: MeterFormProps) {
   const [readings, setReadings] = useState({
-    waterPrevReading: "",
+    waterPrevReading: String(prevWater ?? ""),
     waterCurrReading: "",
-    elecPrevReading: "",
+    elecPrevReading: String(prevElec ?? ""),
     elecCurrReading: "",
   });
   const usage = useMemo(() => getMeterUsage(readings), [readings]);
