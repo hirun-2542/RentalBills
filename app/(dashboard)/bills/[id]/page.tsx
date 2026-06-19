@@ -77,11 +77,11 @@ export default async function BillDetailPage({ params }: PageProps) {
         <CardHeader>
           <CardTitle>ชำระเงิน</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-4 text-sm md:grid-cols-[250px_1fr]">
+        <CardContent className="grid gap-6 text-sm md:grid-cols-[300px_1fr]">
           {settings.promptpayNumber.trim() ? (
             <PromptPayQrImage billId={bill.id} />
           ) : (
-            <div className="flex h-[250px] w-[250px] items-center justify-center border bg-muted px-4 text-center text-sm text-muted-foreground">
+            <div className="flex aspect-[3/4] w-full max-w-[300px] items-center justify-center rounded-xl border bg-muted px-4 text-center text-sm text-muted-foreground">
               ยังไม่ได้ตั้งค่า PromptPay
             </div>
           )}
