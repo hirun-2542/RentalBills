@@ -23,16 +23,18 @@ export default async function NewBillPage() {
     number: room.number,
     tenant: room.tenants[0],
   }));
-  const latestBills = await db.bill.findMany({
-    where: { roomId: { in: activeRooms.map((room) => room.id) } },
-    orderBy: [{ year: "desc" }, { month: "desc" }],
-    distinct: ["roomId"],
-    select: {
-      roomId: true,
-      waterCurrReading: true,
-      elecCurrReading: true,
-    },
-  });
+  const latestBills = activeRooms.length
+    ? await db.bill.findMany({
+        where: { roomId: { in: activeRooms.map((room) => room.id) } },
+        orderBy: [{ year: "desc" }, { month: "desc" }],
+        distinct: ["roomId"],
+        select: {
+          roomId: true,
+          waterCurrReading: true,
+          elecCurrReading: true,
+        },
+      })
+    : [];
   const prevReadings: Record<string, { water: number; elec: number }> =
     Object.fromEntries(
       latestBills.map((bill) => [

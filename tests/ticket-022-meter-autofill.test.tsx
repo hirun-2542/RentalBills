@@ -20,10 +20,16 @@ describe("Ticket 022 meter autofill", () => {
       })
     );
 
-    expect(html).toContain('name="bills.0.waterPrevReading"');
-    expect(html).toContain('value="12.5"');
-    expect(html).toContain('name="bills.0.elecPrevReading"');
-    expect(html).toContain('value="345"');
+    expect(html).toMatch(
+      /name="bills\.0\.waterPrevReading"[^>]*value="12\.5"/
+    );
+    expect(html).toMatch(
+      /name="bills\.0\.elecPrevReading"[^>]*value="345"/
+    );
+    expect(html).toMatch(
+      /name="bills\.0\.waterCurrReading"[^>]*value=""/
+    );
+    expect(html).toMatch(/name="bills\.0\.elecCurrReading"[^>]*value=""/);
   });
 
   it("keeps previous meter readings blank without a prior bill", () => {
@@ -31,9 +37,9 @@ describe("Ticket 022 meter autofill", () => {
       createElement(MeterForm, { room, index: 0 })
     );
 
-    expect(html).toContain('name="bills.0.waterPrevReading"');
-    expect(html).toContain('name="bills.0.elecPrevReading"');
-    expect(html).not.toContain('value="12.5"');
-    expect(html).not.toContain('value="345"');
+    expect(html).toMatch(
+      /name="bills\.0\.waterPrevReading"[^>]*value=""/
+    );
+    expect(html).toMatch(/name="bills\.0\.elecPrevReading"[^>]*value=""/);
   });
 });
