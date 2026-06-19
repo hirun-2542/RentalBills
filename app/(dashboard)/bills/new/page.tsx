@@ -23,6 +23,23 @@ export default async function NewBillPage() {
     number: room.number,
     tenant: room.tenants[0],
   }));
+  const latestBills = await db.bill.findMany({
+    where: { roomId: { in: activeRooms.map((room) => room.id) } },
+    orderBy: [{ year: "desc" }, { month: "desc" }],
+    distinct: ["roomId"],
+    select: {
+      roomId: true,
+      waterCurrReading: true,
+      elecCurrReading: true,
+    },
+  });
+  const prevReadings: Record<string, { water: number; elec: number }> =
+    Object.fromEntries(
+      latestBills.map((bill) => [
+        bill.roomId,
+        { water: bill.waterCurrReading, elec: bill.elecCurrReading },
+      ])
+    );
 
   return (
     <div className="space-y-6">
@@ -42,7 +59,7 @@ export default async function NewBillPage() {
         </div>
       ) : null}
 
-      <BillCreateForm rooms={activeRooms} />
+      <BillCreateForm prevReadings={prevReadings} rooms={activeRooms} />
     </div>
   );
 }

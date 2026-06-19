@@ -17,6 +17,7 @@ type MeterRoom = Pick<Room, "id" | "number"> & {
 
 type BillCreateFormProps = {
   rooms: MeterRoom[];
+  prevReadings?: Record<string, { water: number; elec: number }>;
 };
 
 type ApiError = {
@@ -42,7 +43,10 @@ function formatApiErrors(data: ApiError) {
   return messages.length > 0 ? messages : ["ไม่สามารถสร้างบิลได้"];
 }
 
-export function BillCreateForm({ rooms }: BillCreateFormProps) {
+export function BillCreateForm({
+  rooms,
+  prevReadings = {},
+}: BillCreateFormProps) {
   const router = useRouter();
   const [month, setMonth] = useState(String(now.getMonth() + 1));
   const [year, setYear] = useState(String(now.getFullYear()));
@@ -156,6 +160,8 @@ export function BillCreateForm({ rooms }: BillCreateFormProps) {
             key={room.id}
             index={index}
             onValidityChange={updateMeterValidity}
+            prevElec={prevReadings[room.id]?.elec}
+            prevWater={prevReadings[room.id]?.water}
             room={room}
           />
         ))}
